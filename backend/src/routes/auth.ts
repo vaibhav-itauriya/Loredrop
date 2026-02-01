@@ -93,14 +93,13 @@ router.post('/verify-code', async (req: Request, res: Response) => {
         email,
         displayName: email.split('@')[0], // Use username part of email as display name
         role: 'student',
-        firebaseUid: null, // Explicitly set to null for email-based auth
+        // Do not set firebaseUid to null, let it be undefined so sparse index works
       });
       try {
         await user.save();
       } catch (dbError: any) {
-        // If we get a duplicate key error on firebaseUid, it means another user with null was created
-        // Try to find and use that user instead
-        if (dbError.code === 11000 && dbError.keyPattern?.firebaseUid) {
+        // If we get a duplicate key error, check if it's related to email
+        if (dbError.code === 11000 && dbError.keyPattern?.email) {
           user = await User.findOne({ email });
           if (!user) {
             throw new Error('User creation failed and recovery unsuccessful');
