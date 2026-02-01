@@ -1,8 +1,9 @@
+// Firebase authentication is now handled on the client side
+// The Firebase ID token is passed to Convex via convex.setAuth()
+// See src/components/providers/convex.tsx for implementation
+
 export default {
-  providers: [
-    {
-      domain: process.env.HERCULES_OIDC_AUTHORITY,
-      applicationID: process.env.HERCULES_OIDC_CLIENT_ID,
-    },
-  ],
+  // Auth is configured through Firebase on the client
+  // Convex functions receive the authenticated user context via the ID token
+  providers: [],
 };
