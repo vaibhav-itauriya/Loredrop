@@ -2,7 +2,7 @@ import { Card } from "@/components/ui/card.tsx";
 import { Badge } from "@/components/ui/badge.tsx";
 import { format } from "date-fns";
 import { Calendar, MapPin } from "lucide-react";
-import type { Doc } from "@/convex/_generated/dataModel.d.ts";
+import type { Doc } from "@/convex/_generated/dataModel";
 
 type EventWithOrg = Doc<"events"> & {
   organization: Doc<"organizations"> | null;
