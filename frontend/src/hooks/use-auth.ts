@@ -25,8 +25,8 @@ export function useAuth() {
   }, []);
 
   const signinRedirect = async () => {
-    // Redirect to email verification page
-    window.location.href = '/auth/verify-email';
+    // Redirect to login page (users can choose to login or verify email)
+    window.location.href = '/auth/login';
   };
 
   const removeUser = async () => {

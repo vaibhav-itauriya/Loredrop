@@ -5,6 +5,9 @@ export interface IUser extends Document {
   email: string;
   password?: string; // Optional password for non-OAuth login
   displayName?: string;
+  name?: string; // Full name
+  rollNo?: string; // Roll number
+  branch?: string; // Branch/department
   avatar?: string;
   role?: 'student' | 'professor' | 'admin';
   organizationId?: mongoose.Types.ObjectId;
@@ -107,6 +110,9 @@ const UserSchema = new Schema<IUser>(
     email: { type: String, required: true, unique: true },
     password: String, // Optional password for password-based login
     displayName: String,
+    name: String, // Full name
+    rollNo: String, // Roll number
+    branch: String, // Branch/department
     avatar: String,
     role: { type: String, enum: ['student', 'professor', 'admin'], default: 'student' },
     organizationId: { type: Schema.Types.ObjectId, ref: 'Organization' },

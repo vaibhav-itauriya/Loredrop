@@ -60,6 +60,73 @@ router.get('/feed', optionalAuthMiddleware, async (req: Request, res: Response) 
   }
 });
 
+// Search events - MUST be before /:eventId (otherwise "search" is matched as eventId)
+router.get('/search', optionalAuthMiddleware, async (req: Request, res: Response) => {
+  try {
+    const query = req.query.q as string;
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 10;
+    const skip = (page - 1) * limit;
+
+    if (!query || query.trim().length < 2) {
+      return res.status(400).json({ error: 'Search query must be at least 2 characters' });
+    }
+
+    const searchRegex = new RegExp(query.trim().replace(/\s+/g, ' '), 'i');
+
+    // Find matching organization IDs first for org name search
+    const matchingOrgs = await Organization.find({ name: searchRegex }).select('_id');
+    const matchingOrgIds = matchingOrgs.map((o) => o._id);
+
+    const eventQuery: any = {
+      isPublished: true,
+      $or: [
+        { title: searchRegex },
+        { description: searchRegex },
+        { tags: searchRegex },
+        ...(matchingOrgIds.length > 0 ? [{ organizationId: { $in: matchingOrgIds } }] : []),
+      ],
+    };
+
+    const events = await Event.find(eventQuery)
+      .populate('organizationId', 'name logo slug')
+      .populate('authorId', 'displayName avatar email')
+      .sort({ dateTime: -1 })
+      .skip(skip)
+      .limit(limit);
+
+    const total = await Event.countDocuments(eventQuery);
+
+    // Enrich with user interaction data
+    const enrichedEvents = await Promise.all(
+      events.map(async (event) => {
+        let hasUpvoted = false;
+        let hasCalendarSave = false;
+        if (req.userId) {
+          hasUpvoted = !!(await EventUpvote.exists({
+            eventId: event._id,
+            userId: new mongoose.Types.ObjectId(req.userId),
+          }));
+          hasCalendarSave = !!(await CalendarSave.exists({
+            eventId: event._id,
+            userId: new mongoose.Types.ObjectId(req.userId),
+          }));
+        }
+        return {
+          ...event.toObject(),
+          hasUpvoted: !!hasUpvoted,
+          hasCalendarSave: !!hasCalendarSave,
+        };
+      })
+    );
+
+    res.json({ data: enrichedEvents, events: enrichedEvents, total, page, pages: Math.ceil(total / limit), limit });
+  } catch (error) {
+    console.error('Search error:', error);
+    res.status(500).json({ error: 'Failed to search events' });
+  }
+});
+
 // Get upcoming events
 router.get('/upcoming', async (req: Request, res: Response) => {
   try {
@@ -178,49 +245,6 @@ router.get('/by-organization/:orgId', async (req: Request, res: Response) => {
   } catch (error) {
     console.error('Fetch events error:', error);
     res.status(500).json({ error: 'Failed to fetch events' });
-  }
-});
-
-// Search events
-router.get('/search', optionalAuthMiddleware, async (req: Request, res: Response) => {
-  try {
-    const query = req.query.q as string;
-    const page = parseInt(req.query.page as string) || 1;
-    const limit = parseInt(req.query.limit as string) || 10;
-    const skip = (page - 1) * limit;
-
-    if (!query || query.trim().length < 2) {
-      return res.status(400).json({ error: 'Search query must be at least 2 characters' });
-    }
-
-    const searchRegex = new RegExp(query, 'i');
-    const events = await Event.find({
-      isPublished: true,
-      $or: [
-        { title: searchRegex },
-        { description: searchRegex },
-        { tags: searchRegex },
-      ],
-    })
-      .populate('organizationId', 'name logo')
-      .populate('authorId', 'displayName avatar email')
-      .sort({ dateTime: -1 })
-      .skip(skip)
-      .limit(limit);
-
-    const total = await Event.countDocuments({
-      isPublished: true,
-      $or: [
-        { title: searchRegex },
-        { description: searchRegex },
-        { tags: searchRegex },
-      ],
-    });
-
-    res.json({ events, total, page, limit });
-  } catch (error) {
-    console.error('Search error:', error);
-    res.status(500).json({ error: 'Failed to search events' });
   }
 });
 

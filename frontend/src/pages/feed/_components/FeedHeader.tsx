@@ -6,6 +6,7 @@ import { Zap, Search, Menu, Moon, Sun, UserPlus, LogOut } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useTheme } from "next-themes";
 import NotificationBell from "@/components/NotificationBell.tsx";
+import { SearchBar } from "@/components/SearchBar.tsx";
 import { organizationsAPI } from "@/lib/api";
 import {
   Sheet,
@@ -23,25 +24,30 @@ export default function FeedHeader() {
   const { user, isAuthenticated, removeUser } = useAuth();
   const navigate = useNavigate();
   const [searchOpen, setSearchOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
   const { theme, setTheme } = useTheme();
   const [isOrgMember, setIsOrgMember] = useState(false);
   const [showRequestModal, setShowRequestModal] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [checkingMembership, setCheckingMembership] = useState(false);
 
   // Check if user is org member
   useEffect(() => {
     if (isAuthenticated && user) {
       const checkOrgMembership = async () => {
         try {
-          // Try to fetch if user has any org membership
-          // For now, we'll check this when navigating to admin
-          setIsOrgMember(false); // Will be checked server-side
+          setCheckingMembership(true);
+          const membershipData = await organizationsAPI.getUserMemberships();
+          setIsOrgMember(membershipData.isMember);
         } catch (err) {
           console.error('Failed to check org membership:', err);
+          setIsOrgMember(false);
+        } finally {
+          setCheckingMembership(false);
         }
       };
       checkOrgMembership();
+    } else {
+      setIsOrgMember(false);
     }
   }, [isAuthenticated, user]);
 
@@ -57,14 +63,6 @@ export default function FeedHeader() {
     }
   };
 
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (searchQuery.trim()) {
-      navigate(`/feed?search=${encodeURIComponent(searchQuery)}`);
-      setSearchQuery("");
-      setSearchOpen(false);
-    }
-  };
 
   return (
     <header className="sticky top-0 z-50 backdrop-blur-xl bg-background/80 border-b border-border/50">
@@ -85,16 +83,10 @@ export default function FeedHeader() {
 
           {/* Search - Desktop */}
           <div className="hidden md:flex flex-1 max-w-md mx-8">
-            <form onSubmit={handleSearch} className="relative w-full">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <input
-                type="text"
-                placeholder="Search IITK, events, councils..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 rounded-xl bg-muted/50 border border-border/50 focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/20 text-sm transition-all"
-              />
-            </form>
+            <SearchBar
+              placeholder="Search events, organizations, tags..."
+              className="w-full"
+            />
           </div>
 
           {/* Actions */}
@@ -140,9 +132,11 @@ export default function FeedHeader() {
                     <Link to="/profile">
                       <DropdownMenuItem>My Profile</DropdownMenuItem>
                     </Link>
-                    <Link to="/admin">
-                      <DropdownMenuItem>Admin Dashboard</DropdownMenuItem>
-                    </Link>
+                    {isOrgMember && (
+                      <Link to="/admin">
+                        <DropdownMenuItem>Admin Dashboard</DropdownMenuItem>
+                      </Link>
+                    )}
                     <DropdownMenuItem onClick={() => setShowRequestModal(true)} className="gap-2">
                       <UserPlus className="w-4 h-4" />
                       Request Organization Access
@@ -208,12 +202,14 @@ export default function FeedHeader() {
                       >
                         My Profile
                       </Link>
-                      <Link
-                        to="/admin"
-                        className="py-2 text-sm font-medium hover:text-primary transition-colors"
-                      >
-                        Admin Dashboard
-                      </Link>
+                      {isOrgMember && (
+                        <Link
+                          to="/admin"
+                          className="py-2 text-sm font-medium hover:text-primary transition-colors"
+                        >
+                          Admin Dashboard
+                        </Link>
+                      )}
                     </>
                   )}
                 </div>
@@ -224,19 +220,13 @@ export default function FeedHeader() {
 
         {/* Mobile Search Bar */}
         {searchOpen && (
-          <form onSubmit={handleSearch} className="md:hidden pb-4">
-            <div className="relative w-full">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <input
-                type="text"
-                placeholder="Search IITK, events, councils..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 rounded-xl bg-muted/50 border border-border/50 focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/20 text-sm transition-all"
-                autoFocus
-              />
-            </div>
-          </form>
+          <div className="md:hidden pb-4">
+            <SearchBar
+              placeholder="Search events, organizations..."
+              autoFocus
+              compact
+            />
+          </div>
         )}
       </div>
 
@@ -289,19 +279,23 @@ function OrganizationRequestForm({ onClose }: { onClose: () => void }) {
 
     try {
       setIsLoading(true);
+      const token = localStorage.getItem('authToken');
       const response = await fetch(`${import.meta.env.VITE_API_URL}/organization-requests/${selectedOrgId}/request-access`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${await user?.getIdToken()}`,
+          'Authorization': `Bearer ${token}`,
         },
       });
 
       if (response.ok) {
         alert('Request sent successfully! Admins will review it soon.');
         onClose();
+        // Refresh membership status
+        window.location.reload();
       } else {
-        alert('Failed to send request');
+        const errorData = await response.json();
+        alert(errorData.error || 'Failed to send request');
       }
     } catch (err) {
       console.error('Error sending request:', err);

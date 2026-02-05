@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/use-auth';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button.tsx';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card.tsx';
 import { Input } from '@/components/ui/input.tsx';
 import { Textarea } from '@/components/ui/textarea.tsx';
 import { Label } from '@/components/ui/label.tsx';
-import { Plus, ArrowLeft, Calendar, Users, Upload, X } from 'lucide-react';
+import { Plus, ArrowLeft, Calendar, Users, Upload, X, UserPlus, AlertCircle } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -15,7 +15,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog.tsx';
-import { eventsAPI } from '@/lib/api';
+import { eventsAPI, organizationsAPI } from '@/lib/api';
 import { Alert, AlertDescription } from '@/components/ui/alert.tsx';
 
 interface Organization {
@@ -28,11 +28,15 @@ interface Organization {
 
 export default function AdminPage() {
   const { user, isAuthenticated } = useAuth();
+  const navigate = useNavigate();
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [selectedOrg, setSelectedOrg] = useState<Organization | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [isOrgMember, setIsOrgMember] = useState(false);
+  const [checkingMembership, setCheckingMembership] = useState(true);
+  const [showRequestModal, setShowRequestModal] = useState(false);
 
   // Form state for new event
   const [eventForm, setEventForm] = useState({
@@ -50,35 +54,47 @@ export default function AdminPage() {
 
   useEffect(() => {
     if (!isAuthenticated) {
+      setCheckingMembership(false);
       return;
     }
-    fetchOrganizations();
+    checkMembership();
   }, [isAuthenticated]);
 
-  const fetchOrganizations = async () => {
+  const checkMembership = async () => {
     try {
-      setLoading(true);
-      const orgs = await eventsAPI.getOrganizations?.() || [];
-      setOrganizations(orgs);
-      if (orgs.length > 0) {
+      setCheckingMembership(true);
+      const membershipData = await organizationsAPI.getUserMemberships();
+      setIsOrgMember(membershipData.isMember);
+      if (membershipData.isMember && membershipData.organizations.length > 0) {
+        // Map organizations to match our interface
+        const orgs = membershipData.organizations.map((org: any) => ({
+          _id: org._id,
+          name: org.name,
+          slug: org.slug,
+          description: org.description,
+          logo: org.logo,
+        }));
+        setOrganizations(orgs);
         setSelectedOrg(orgs[0]);
         fetchEvents(orgs[0]._id);
       }
     } catch (err) {
-      setError('Failed to load organizations');
-      console.error(err);
+      console.error('Failed to check membership:', err);
+      setIsOrgMember(false);
     } finally {
-      setLoading(false);
+      setCheckingMembership(false);
     }
   };
 
+
   const fetchEvents = async (orgId: string) => {
     try {
+      const token = localStorage.getItem('authToken');
       const response = await fetch(
         `${import.meta.env.VITE_API_URL}/events/by-organization/${orgId}`,
         {
           headers: {
-            'Authorization': `Bearer ${await user?.getIdToken()}`,
+            'Authorization': `Bearer ${token}`,
           },
         }
       );
@@ -99,11 +115,12 @@ export default function AdminPage() {
       setLoading(true);
       setError(null);
 
+      const token = localStorage.getItem('authToken');
       const response = await fetch(`${import.meta.env.VITE_API_URL}/events`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${await user?.getIdToken()}`,
+          'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify({
           title: eventForm.title,
@@ -145,6 +162,76 @@ export default function AdminPage() {
           <Link to="/feed">
             <Button>Go to Feed</Button>
           </Link>
+        </div>
+      </div>
+    );
+  }
+
+  if (checkingMembership) {
+    return (
+      <div className="min-h-screen bg-background pt-20 px-4">
+        <div className="max-w-2xl mx-auto text-center">
+          <p className="text-muted-foreground">Checking access...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isOrgMember) {
+    return (
+      <div className="min-h-screen bg-background pt-20 px-4">
+        <div className="max-w-2xl mx-auto">
+          <div className="mb-8">
+            <Link to="/feed" className="inline-flex items-center gap-2 text-primary hover:text-primary/80 mb-4">
+              <ArrowLeft className="w-4 h-4" />
+              Back to Feed
+            </Link>
+            <h1 className="text-4xl font-bold tracking-tight">Organization Access Required</h1>
+            <p className="text-muted-foreground mt-2">You need to be a member of an organization to access the admin dashboard</p>
+          </div>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <AlertCircle className="w-5 h-5" />
+                Request Organization Access
+              </CardTitle>
+              <CardDescription>
+                Request access to an organization to create and manage events
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <Alert>
+                <AlertDescription>
+                  You are currently not a member of any organization. Request access to an organization to get started with creating events.
+                </AlertDescription>
+              </Alert>
+              <Button onClick={() => setShowRequestModal(true)} className="w-full" size="lg">
+                <UserPlus className="w-4 h-4 mr-2" />
+                Request Organization Access
+              </Button>
+            </CardContent>
+          </Card>
+
+          {/* Request Organization Modal */}
+          {showRequestModal && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+              <div className="bg-background rounded-lg p-6 max-w-md w-full mx-4">
+                <h2 className="text-lg font-semibold mb-4">Request Organization Access</h2>
+                <p className="text-sm text-muted-foreground mb-4">
+                  Select an organization to request access. Admins will review your request and respond within 24 hours.
+                </p>
+                <OrganizationRequestForm onClose={() => setShowRequestModal(false)} onSuccess={checkMembership} />
+                <Button
+                  variant="outline"
+                  className="w-full mt-4"
+                  onClick={() => setShowRequestModal(false)}
+                >
+                  Close
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     );
@@ -375,6 +462,94 @@ export default function AdminPage() {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+// Organization Request Form Component
+function OrganizationRequestForm({ onClose, onSuccess }: { onClose: () => void; onSuccess?: () => void }) {
+  const [organizations, setOrganizations] = useState<any[]>([]);
+  const [selectedOrgId, setSelectedOrgId] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchOrgs = async () => {
+      try {
+        const orgs = await organizationsAPI.list();
+        setOrganizations(orgs);
+      } catch (err) {
+        console.error('Failed to fetch organizations:', err);
+        setError('Failed to load organizations');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchOrgs();
+  }, []);
+
+  const handleSubmit = async () => {
+    if (!selectedOrgId) return;
+
+    try {
+      setIsLoading(true);
+      setError(null);
+      const token = localStorage.getItem('authToken');
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/organization-requests/${selectedOrgId}/request-access`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      if (response.ok) {
+        alert('Request sent successfully! Admins will review it soon.');
+        onSuccess?.();
+        onClose();
+      } else {
+        const errorData = await response.json();
+        setError(errorData.error || 'Failed to send request');
+      }
+    } catch (err) {
+      console.error('Error sending request:', err);
+      setError('Failed to send request');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  if (isLoading && organizations.length === 0) {
+    return <p className="text-sm text-muted-foreground">Loading organizations...</p>;
+  }
+
+  return (
+    <div className="space-y-3">
+      {error && (
+        <Alert variant="destructive">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+      <select
+        value={selectedOrgId}
+        onChange={(e) => setSelectedOrgId(e.target.value)}
+        className="w-full px-3 py-2 rounded-lg bg-background border border-input text-sm"
+        disabled={isLoading}
+      >
+        <option value="">Select an organization</option>
+        {organizations.map((org) => (
+          <option key={org._id} value={org._id}>
+            {org.name}
+          </option>
+        ))}
+      </select>
+      <Button
+        className="w-full"
+        onClick={handleSubmit}
+        disabled={!selectedOrgId || isLoading}
+      >
+        {isLoading ? 'Sending...' : 'Send Request'}
+      </Button>
     </div>
   );
 }

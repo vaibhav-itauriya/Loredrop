@@ -1,4 +1,5 @@
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+// Use relative /api in dev (proxied to backend); full URL when VITE_API_URL is set (e.g. production)
+const API_BASE_URL = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? '/api' : 'http://localhost:3001/api');
 
 async function getAuthToken(): Promise<string | null> {
   // First try to get token from localStorage (email auth)
@@ -39,8 +40,17 @@ async function fetchWithAuth(url: string, options: RequestInit = {}) {
   });
 
   if (!response.ok) {
-    console.error(`API error: ${response.status}`, await response.text());
-    throw new Error(`API error: ${response.status}`);
+    let errorMessage = `API error: ${response.status}`;
+    try {
+      const body = await response.json();
+      if (body?.error && typeof body.error === 'string') {
+        errorMessage = body.error;
+      }
+    } catch {
+      // Response body wasn't JSON, use status message
+    }
+    console.error('API error:', response.status, errorMessage);
+    throw new Error(errorMessage);
   }
 
   return response.json();
@@ -133,6 +143,20 @@ export const interactionsAPI = {
   },
 };
 
+// Auth/User API
+export const authAPI = {
+  getProfile: () => {
+    return fetchWithAuth(`${API_BASE_URL}/auth/me`);
+  },
+
+  updateProfile: (data: { displayName?: string; name?: string; rollNo?: string; branch?: string; avatar?: string }) => {
+    return fetchWithAuth(`${API_BASE_URL}/auth/profile`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  },
+};
+
 // Organizations API
 export const organizationsAPI = {
   list: async () => {
@@ -159,5 +183,9 @@ export const organizationsAPI = {
       console.error(`Failed to fetch organization ${slug}:`, error);
       throw error;
     }
+  },
+
+  getUserMemberships: async () => {
+    return fetchWithAuth(`${API_BASE_URL}/organizations/user/memberships`);
   },
 };

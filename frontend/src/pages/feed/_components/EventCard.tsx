@@ -1,5 +1,5 @@
 import { format, isPast, isToday, isTomorrow } from "date-fns";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, memo } from "react";
 import { Card } from "@/components/ui/card.tsx";
 import { Badge } from "@/components/ui/badge.tsx";
 import { Button } from "@/components/ui/button.tsx";
@@ -42,7 +42,7 @@ const audienceLabels: Record<string, string> = {
   all: "Everyone",
 };
 
-export default function EventCard({ event }: EventCardProps) {
+function EventCard({ event }: EventCardProps) {
   const { isAuthenticated } = useAuth();
   const [hasUpvoted, setHasUpvoted] = useState(event.hasUpvoted || false);
   const [upvoteCount, setUpvoteCount] = useState(event.upvoteCount || 0);
@@ -52,19 +52,29 @@ export default function EventCard({ event }: EventCardProps) {
   const [commentText, setCommentText] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
-  // Fetch comments on mount or when event changes
+  // Fetch comments only when user opens comments section
   useEffect(() => {
+    if (!showComments) return;
+    
+    let cancelled = false;
     const fetch = async () => {
       try {
         const data = await interactionsAPI.getComments(event._id);
-        setComments(data);
+        if (!cancelled) {
+          setComments(data);
+        }
       } catch (error) {
-        console.error("Failed to fetch comments:", error);
+        if (!cancelled) {
+          console.error("Failed to fetch comments:", error);
+        }
       }
     };
-    if (showComments) {
-      fetch();
-    }
+    
+    fetch();
+    
+    return () => {
+      cancelled = true;
+    };
   }, [event._id, showComments]);
 
   const handleUpvote = async () => {
@@ -161,12 +171,26 @@ export default function EventCard({ event }: EventCardProps) {
     }
   };
 
-  const org = event.organizationId;
-  const author = event.authorId;
-  const firstImageUrl = event.media?.[0]?.url;
+  // Memoize computed values to prevent recalculation on every render
+  const org = useMemo(() => event.organizationId, [event.organizationId]);
+  const author = useMemo(() => event.authorId, [event.authorId]);
+  const firstImageUrl = useMemo(() => event.media?.[0]?.url, [event.media]);
+  
+  // Memoize date calculations
+  const eventDateLabel = useMemo(() => getEventDateLabel(event.dateTime), [event.dateTime]);
+  const eventTimeDisplay = useMemo(() => getEventTimeDisplay(event.dateTime), [event.dateTime]);
+  const formattedDate = useMemo(() => format(new Date(event.dateTime), "MMM d, yyyy"), [event.dateTime]);
+  
+  // Memoize audience labels
+  const audienceDisplay = useMemo(() => {
+    return event.audience?.map((a: string) => audienceLabels[a]).join(", ") || "Everyone";
+  }, [event.audience]);
 
   return (
-    <Card className="overflow-hidden border-border/50 hover:border-border transition-colors">
+    <Card
+      data-event-id={event._id}
+      className="overflow-hidden border-border/50 hover:border-border transition-colors"
+    >
       {/* Header Image */}
       {firstImageUrl && (
         <div className="aspect-video w-full overflow-hidden bg-muted">
@@ -174,6 +198,8 @@ export default function EventCard({ event }: EventCardProps) {
             src={firstImageUrl}
             alt={event.title}
             className="w-full h-full object-cover"
+            loading="lazy"
+            decoding="async"
           />
         </div>
       )}
@@ -188,6 +214,8 @@ export default function EventCard({ event }: EventCardProps) {
                 src={org.logo}
                 alt={org.name}
                 className="w-10 h-10 rounded-lg flex-shrink-0"
+                loading="lazy"
+                decoding="async"
               />
             )}
             <div className="min-w-0 flex-1">
@@ -195,12 +223,12 @@ export default function EventCard({ event }: EventCardProps) {
                 {org?.name || "Unknown Organization"}
               </p>
               <p className="text-xs text-muted-foreground">
-                {author?.displayName || "Unknown Author"}
+                {author?.name || author?.displayName || "Unknown Author"}
               </p>
             </div>
           </div>
           <Badge variant="secondary" className="flex-shrink-0">
-            {getEventDateLabel(event.dateTime)}
+            {eventDateLabel}
           </Badge>
         </div>
 
@@ -229,7 +257,7 @@ export default function EventCard({ event }: EventCardProps) {
             <span className="capitalize px-2 py-1 bg-muted rounded text-xs font-medium">
               {event.mode}
             </span>
-            <span>For: {event.audience?.map((a: string) => audienceLabels[a]).join(", ") || "Everyone"}</span>
+            <span>For: {audienceDisplay}</span>
           </div>
         </div>
 
@@ -312,7 +340,7 @@ export default function EventCard({ event }: EventCardProps) {
               ) : (
                 comments.map((comment: any) => (
                   <div key={comment._id} className="text-sm p-2 bg-muted/50 rounded">
-                    <p className="font-medium text-xs">{comment.userId?.displayName}</p>
+                    <p className="font-medium text-xs">{comment.userId?.name || comment.userId?.displayName}</p>
                     <p className="text-muted-foreground">{comment.text}</p>
                     <p className="text-xs text-muted-foreground/75 mt-1">
                       {format(new Date(comment.createdAt), "MMM d, h:mm a")}
@@ -347,3 +375,6 @@ export default function EventCard({ event }: EventCardProps) {
     </Card>
   );
 }
+
+// Memoize EventCard to prevent unnecessary re-renders
+export default memo(EventCard);
