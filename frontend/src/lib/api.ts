@@ -189,3 +189,20 @@ export const organizationsAPI = {
     return fetchWithAuth(`${API_BASE_URL}/organizations/user/memberships`);
   },
 };
+
+// Organization requests (main admin: getAllPending, approve, reject)
+export const organizationRequestsAPI = {
+  getAllPending: () => {
+    return fetchWithAuth(`${API_BASE_URL}/organization-requests/all-pending`);
+  },
+  approve: (requestId: string) => {
+    return fetchWithAuth(`${API_BASE_URL}/organization-requests/approve/${requestId}`, {
+      method: 'POST',
+    });
+  },
+  reject: (requestId: string) => {
+    return fetchWithAuth(`${API_BASE_URL}/organization-requests/reject/${requestId}`, {
+      method: 'POST',
+    });
+  },
+};

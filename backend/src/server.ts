@@ -58,40 +58,43 @@ try {
 }
 
 // MongoDB connection
-mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/loredrop')
+mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/loredrop', {
+  // Increase server selection timeout to give more time for DB startup
+  serverSelectionTimeoutMS: 30000,
+})
   .then(async () => {
     console.log('Connected to MongoDB');
-    
+
     // Fix duplicate firebaseUid index issue
     try {
       const { User } = await import('./models');
-      // Drop old index if it exists
-      await User.collection.dropIndex('firebaseUid_1').catch(() => {
-        // Index might not exist, that's fine
-      });
-      // Recreate with sparse: true to allow multiple null values
+      await User.collection.dropIndex('firebaseUid_1').catch(() => {});
       await User.collection.createIndex({ firebaseUid: 1 }, { sparse: true, unique: true });
       console.log('✓ Fixed firebaseUid index for email-based authentication');
     } catch (indexError) {
       console.log('Index migration note:', (indexError as any).message);
     }
+
+    // Routes (register after successful DB connection)
+    app.use('/api/events', eventRoutes);
+    app.use('/api/interactions', interactionRoutes);
+    app.use('/api/organizations', organizationRoutes);
+    app.use('/api/auth', authRoutes);
+    app.use('/api/organization-requests', organizationRequestRoutes);
+
+    // Health check
+    app.get('/health', (req, res) => {
+      res.json({ status: 'ok' });
+    });
+
+    const PORT = process.env.PORT || 3001;
+
+    app.listen(PORT, () => {
+      console.log(`Backend server running on port ${PORT}`);
+    });
   })
-  .catch(err => console.error('MongoDB connection error:', err));
-
-// Routes
-app.use('/api/events', eventRoutes);
-app.use('/api/interactions', interactionRoutes);
-app.use('/api/organizations', organizationRoutes);
-app.use('/api/auth', authRoutes);
-app.use('/api/organization-requests', organizationRequestRoutes);
-
-// Health check
-app.get('/health', (req, res) => {
-  res.json({ status: 'ok' });
-});
-
-const PORT = process.env.PORT || 3001;
-
-app.listen(PORT, () => {
-  console.log(`Backend server running on port ${PORT}`);
-});
+  .catch(err => {
+    console.error('MongoDB connection error:', err);
+    // Exit process when DB connection fails so the problem is visible
+    process.exit(1);
+  });
