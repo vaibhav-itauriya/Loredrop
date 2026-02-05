@@ -12,5 +12,8 @@
     "start:frontend": "pnpm --filter frontend --workspace-root run dev",
     "start:backend": "pnpm --filter backend --workspace-root run dev",
     "build": "pnpm -w -r run build"
+  },
+  "dependencies": {
+    "mongodb": "^7.1.0"
   }
 }
