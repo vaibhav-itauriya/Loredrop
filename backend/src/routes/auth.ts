@@ -15,7 +15,8 @@ function generateVerificationCode(): string {
 // Send verification code to email
 router.post('/send-verification-code', async (req: Request, res: Response) => {
   try {
-    const { email } = req.body;
+    const emailRaw = typeof req.body?.email === 'string' ? req.body.email : '';
+    const email = emailRaw.trim().toLowerCase();
 
     if (!email || !email.endsWith('@iitk.ac.in')) {
       return res.status(400).json({ error: 'Invalid IITK email address' });
@@ -67,7 +68,9 @@ router.post('/send-verification-code', async (req: Request, res: Response) => {
 // Verify code and create/update user
 router.post('/verify-code', async (req: Request, res: Response) => {
   try {
-    const { email, code } = req.body;
+    const emailRaw = typeof req.body?.email === 'string' ? req.body.email : '';
+    const email = emailRaw.trim().toLowerCase();
+    const code = typeof req.body?.code === 'string' ? req.body.code.trim() : '';
 
     if (!email || !code) {
       return res.status(400).json({ error: 'Missing required fields: email and code' });
@@ -153,7 +156,9 @@ router.post('/verify-code', async (req: Request, res: Response) => {
 // Create or update password
 router.post('/set-password', async (req: Request, res: Response) => {
   try {
-    const { email, password } = req.body;
+    const emailRaw = typeof req.body?.email === 'string' ? req.body.email : '';
+    const email = emailRaw.trim().toLowerCase();
+    const password = typeof req.body?.password === 'string' ? req.body.password : '';
 
     if (!email || !password) {
       return res.status(400).json({ error: 'Missing email or password' });
@@ -327,7 +332,9 @@ router.patch('/profile', authMiddleware, async (req: Request, res: Response) => 
 // Login with password
 router.post('/login', async (req: Request, res: Response) => {
   try {
-    const { email, password } = req.body;
+    const emailRaw = typeof req.body?.email === 'string' ? req.body.email : '';
+    const email = emailRaw.trim().toLowerCase();
+    const password = typeof req.body?.password === 'string' ? req.body.password : '';
 
     if (!email || !password) {
       return res.status(400).json({ error: 'Missing email or password' });

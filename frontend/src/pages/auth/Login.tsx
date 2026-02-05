@@ -16,20 +16,23 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const validateIITEmail = (email: string) => {
-    return email.endsWith('@iitk.ac.in');
+  const normalizeEmail = (value: string) => value.trim().toLowerCase();
+  const validateIITEmail = (value: string) => {
+    return normalizeEmail(value).endsWith('@iitk.ac.in');
   };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
-    if (!email || !password) {
+    const emailToUse = normalizeEmail(email);
+
+    if (!emailToUse || !password) {
       setError('Please fill in all fields');
       return;
     }
 
-    if (!validateIITEmail(email)) {
+    if (!validateIITEmail(emailToUse)) {
       setError('Please use a valid IITK email address (ending with @iitk.ac.in)');
       return;
     }
@@ -39,7 +42,7 @@ export default function LoginPage() {
       const response = await fetch(`${import.meta.env.VITE_API_URL}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email: emailToUse, password }),
       });
 
       if (!response.ok) {

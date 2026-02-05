@@ -30,20 +30,23 @@ export default function EmailVerificationPage() {
     }
   }, [resendCooldown]);
 
+  const normalizeEmail = (email: string) => email.trim().toLowerCase();
   const validateIITEmail = (email: string) => {
-    return email.endsWith('@iitk.ac.in');
+    return normalizeEmail(email).endsWith('@iitk.ac.in');
   };
 
   const handleEmailSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
-    if (!iitEmail) {
+    const emailToUse = normalizeEmail(iitEmail);
+
+    if (!emailToUse) {
       setError('Please enter your IITK email');
       return;
     }
 
-    if (!validateIITEmail(iitEmail)) {
+    if (!validateIITEmail(emailToUse)) {
       setError('Please use a valid IITK email address (ending with @iitk.ac.in)');
       return;
     }
@@ -54,7 +57,7 @@ export default function EmailVerificationPage() {
       const response = await fetch(`${import.meta.env.VITE_API_URL}/auth/send-verification-code`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: iitEmail }),
+        body: JSON.stringify({ email: emailToUse }),
       });
 
       if (!response.ok) {
@@ -64,6 +67,7 @@ export default function EmailVerificationPage() {
       }
 
       const data = await response.json();
+      setIitEmail(emailToUse);
       setFirebaseUid(data.firebaseUid || null); // Store UID if returned
       setSuccess('✓ Verification code sent to your email!');
       toast.success('Check your email for the verification code');
@@ -95,7 +99,7 @@ export default function EmailVerificationPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          email: iitEmail,
+          email: normalizeEmail(iitEmail),
           code: verificationCode,
         }),
       });
@@ -151,7 +155,7 @@ export default function EmailVerificationPage() {
       const response = await fetch(`${import.meta.env.VITE_API_URL}/auth/send-verification-code`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: iitEmail }),
+        body: JSON.stringify({ email: normalizeEmail(iitEmail) }),
       });
 
       if (!response.ok) {
@@ -193,7 +197,7 @@ export default function EmailVerificationPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          email: iitEmail,
+          email: normalizeEmail(iitEmail),
           password: password,
         }),
       });
