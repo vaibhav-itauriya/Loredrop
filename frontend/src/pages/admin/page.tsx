@@ -1,21 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/use-auth';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button.tsx';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card.tsx';
 import { Input } from '@/components/ui/input.tsx';
 import { Textarea } from '@/components/ui/textarea.tsx';
 import { Label } from '@/components/ui/label.tsx';
-import { Plus, ArrowLeft, Calendar, Users, Upload, X, UserPlus, AlertCircle } from 'lucide-react';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog.tsx';
-import { eventsAPI, organizationsAPI } from '@/lib/api';
+import { Plus, ArrowLeft, Calendar, Users, X, UserPlus, AlertCircle, Check, XCircle, Shield } from 'lucide-react';
+import { eventsAPI, organizationsAPI, authAPI, organizationRequestsAPI } from '@/lib/api';
 import { Alert, AlertDescription } from '@/components/ui/alert.tsx';
 
 interface Organization {
@@ -26,9 +18,16 @@ interface Organization {
   logo?: string;
 }
 
+interface PendingRequest {
+  _id: string;
+  userId: { _id: string; displayName?: string; email: string };
+  organizationId: { _id: string; name: string; slug: string };
+  status: string;
+  requestedAt: string;
+}
+
 export default function AdminPage() {
   const { user, isAuthenticated } = useAuth();
-  const navigate = useNavigate();
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [selectedOrg, setSelectedOrg] = useState<Organization | null>(null);
   const [loading, setLoading] = useState(false);
@@ -37,6 +36,10 @@ export default function AdminPage() {
   const [isOrgMember, setIsOrgMember] = useState(false);
   const [checkingMembership, setCheckingMembership] = useState(true);
   const [showRequestModal, setShowRequestModal] = useState(false);
+  const [isMainAdmin, setIsMainAdmin] = useState(false);
+  const [pendingRequests, setPendingRequests] = useState<PendingRequest[]>([]);
+  const [loadingRequests, setLoadingRequests] = useState(false);
+  const [actingRequestId, setActingRequestId] = useState<string | null>(null);
 
   // Form state for new event
   const [eventForm, setEventForm] = useState({
@@ -63,10 +66,13 @@ export default function AdminPage() {
   const checkMembership = async () => {
     try {
       setCheckingMembership(true);
-      const membershipData = await organizationsAPI.getUserMemberships();
+      const [profileRes, membershipData] = await Promise.all([
+        authAPI.getProfile().catch(() => ({ isMainAdmin: false })),
+        organizationsAPI.getUserMemberships(),
+      ]);
+      setIsMainAdmin(!!(profileRes as any).isMainAdmin);
       setIsOrgMember(membershipData.isMember);
       if (membershipData.isMember && membershipData.organizations.length > 0) {
-        // Map organizations to match our interface
         const orgs = membershipData.organizations.map((org: any) => ({
           _id: org._id,
           name: org.name,
@@ -83,6 +89,53 @@ export default function AdminPage() {
       setIsOrgMember(false);
     } finally {
       setCheckingMembership(false);
+    }
+  };
+
+  const fetchPendingRequests = async () => {
+    try {
+      setLoadingRequests(true);
+      const list = await organizationRequestsAPI.getAllPending();
+      setPendingRequests(Array.isArray(list) ? list : []);
+    } catch (err) {
+      console.error('Failed to fetch pending requests:', err);
+      setPendingRequests([]);
+    } finally {
+      setLoadingRequests(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isAuthenticated && isMainAdmin) {
+      fetchPendingRequests();
+    }
+  }, [isAuthenticated, isMainAdmin]);
+
+  const handleApproveRequest = async (requestId: string) => {
+    try {
+      setActingRequestId(requestId);
+      await organizationRequestsAPI.approve(requestId);
+      setPendingRequests((prev) => prev.filter((r) => r._id !== requestId));
+      setSuccessMessage('Request approved.');
+      setTimeout(() => setSuccessMessage(null), 3000);
+    } catch (err: any) {
+      setError(err?.message || 'Failed to approve');
+    } finally {
+      setActingRequestId(null);
+    }
+  };
+
+  const handleRejectRequest = async (requestId: string) => {
+    try {
+      setActingRequestId(requestId);
+      await organizationRequestsAPI.reject(requestId);
+      setPendingRequests((prev) => prev.filter((r) => r._id !== requestId));
+      setSuccessMessage('Request rejected.');
+      setTimeout(() => setSuccessMessage(null), 3000);
+    } catch (err: any) {
+      setError(err?.message || 'Failed to reject');
+    } finally {
+      setActingRequestId(null);
     }
   };
 
@@ -177,7 +230,8 @@ export default function AdminPage() {
     );
   }
 
-  if (!isOrgMember) {
+  const canAccessAdmin = isMainAdmin || isOrgMember;
+  if (!canAccessAdmin) {
     return (
       <div className="min-h-screen bg-background pt-20 px-4">
         <div className="max-w-2xl mx-auto">
@@ -246,8 +300,12 @@ export default function AdminPage() {
             <ArrowLeft className="w-4 h-4" />
             Back to Feed
           </Link>
-          <h1 className="text-4xl font-bold tracking-tight">Organization Admin</h1>
-          <p className="text-muted-foreground mt-2">Manage your organization and create events</p>
+          <h1 className="text-4xl font-bold tracking-tight">
+            {isMainAdmin ? 'Admin Dashboard' : 'Organization Admin'}
+          </h1>
+          <p className="text-muted-foreground mt-2">
+            {isMainAdmin ? 'Review access requests and manage events' : 'Manage your organization and create events'}
+          </p>
         </div>
 
         {error && (
@@ -257,11 +315,83 @@ export default function AdminPage() {
         )}
 
         {successMessage && (
-          <Alert className="mb-6 bg-green-50 border-green-200">
-            <AlertDescription className="text-green-800">{successMessage}</AlertDescription>
+          <Alert className="mb-6 bg-green-50 border-green-200 dark:bg-green-950/30 dark:border-green-800">
+            <AlertDescription className="text-green-800 dark:text-green-200">{successMessage}</AlertDescription>
           </Alert>
         )}
 
+        {/* Main admin only: Pending access requests */}
+        {isMainAdmin && (
+          <Card className="mb-6">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Shield className="w-5 h-5" />
+                Pending Access Requests
+              </CardTitle>
+              <CardDescription>
+                Approve or reject organization access requests. You will be notified when new requests arrive.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {loadingRequests ? (
+                <p className="text-muted-foreground text-sm">Loading requests...</p>
+              ) : pendingRequests.length === 0 ? (
+                <p className="text-muted-foreground text-sm">No pending requests</p>
+              ) : (
+                <div className="space-y-3">
+                  {pendingRequests.map((req) => (
+                    <div
+                      key={req._id}
+                      className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3"
+                    >
+                      <div>
+                        <p className="font-medium">
+                          {(req.userId as any)?.displayName || (req.userId as any)?.email || 'Unknown'}
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          {(req.userId as any)?.email} → {(req.organizationId as any)?.name}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {new Date(req.requestedAt).toLocaleString()}
+                        </p>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          variant="default"
+                          onClick={() => handleApproveRequest(req._id)}
+                          disabled={!!actingRequestId}
+                        >
+                          <Check className="w-4 h-4 mr-1" />
+                          Approve
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          onClick={() => handleRejectRequest(req._id)}
+                          disabled={!!actingRequestId}
+                        >
+                          <XCircle className="w-4 h-4 mr-1" />
+                          Reject
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {!isOrgMember && (
+          <Alert className="mb-6">
+            <AlertDescription>
+              {isMainAdmin ? 'As main admin you can approve access requests above. To create events, request access to an organization from the feed menu.' : 'Request organization access above to create events.'}
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {isOrgMember && (
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
           {/* Sidebar - Organizations */}
           <div className="lg:col-span-1">
@@ -461,6 +591,7 @@ export default function AdminPage() {
             </Card>
           </div>
         </div>
+        )}
       </div>
     </div>
   );

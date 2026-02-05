@@ -73,9 +73,10 @@ export interface ICalendarSave extends Document {
 
 export interface INotification extends Document {
   userId: mongoose.Types.ObjectId;
-  type: 'event_comment' | 'event_like' | 'new_org_event' | 'event_reminder';
+  type: 'event_comment' | 'event_like' | 'new_org_event' | 'event_reminder' | 'access_request';
   eventId?: mongoose.Types.ObjectId;
   fromUserId?: mongoose.Types.ObjectId;
+  requestId?: mongoose.Types.ObjectId;
   message: string;
   read: boolean;
   createdAt: Date;
@@ -196,9 +197,10 @@ CalendarSaveSchema.index({ userId: 1 });
 const NotificationSchema = new Schema<INotification>(
   {
     userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
-    type: { type: String, enum: ['event_comment', 'event_like', 'new_org_event', 'event_reminder'], required: true },
+    type: { type: String, enum: ['event_comment', 'event_like', 'new_org_event', 'event_reminder', 'access_request'], required: true },
     eventId: { type: Schema.Types.ObjectId, ref: 'Event' },
     fromUserId: { type: Schema.Types.ObjectId, ref: 'User' },
+    requestId: { type: Schema.Types.ObjectId, ref: 'OrganizationRequest' },
     message: { type: String, required: true },
     read: { type: Boolean, default: false },
   },

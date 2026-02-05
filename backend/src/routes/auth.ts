@@ -238,6 +238,9 @@ router.get('/me', authMiddleware, async (req: Request, res: Response) => {
       EventComment.countDocuments({ userId }),
     ]);
 
+    const MAIN_ADMIN_EMAIL = 'mukunds23@iitk.ac.in';
+    const isMainAdmin = user.email?.toLowerCase() === MAIN_ADMIN_EMAIL;
+
     res.json({
       _id: user._id,
       email: user.email,
@@ -247,6 +250,7 @@ router.get('/me', authMiddleware, async (req: Request, res: Response) => {
       branch: user.branch,
       avatar: user.avatar,
       role: user.role,
+      isMainAdmin: !!isMainAdmin,
       createdAt: user.createdAt,
       stats: {
         savedEvents: savedCount,

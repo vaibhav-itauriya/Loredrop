@@ -7,7 +7,7 @@ import { useState, useEffect } from "react";
 import { useTheme } from "next-themes";
 import NotificationBell from "@/components/NotificationBell.tsx";
 import { SearchBar } from "@/components/SearchBar.tsx";
-import { organizationsAPI } from "@/lib/api";
+import { organizationsAPI, authAPI } from "@/lib/api";
 import {
   Sheet,
   SheetContent,
@@ -26,28 +26,35 @@ export default function FeedHeader() {
   const [searchOpen, setSearchOpen] = useState(false);
   const { theme, setTheme } = useTheme();
   const [isOrgMember, setIsOrgMember] = useState(false);
+  const [isMainAdmin, setIsMainAdmin] = useState(false);
   const [showRequestModal, setShowRequestModal] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [checkingMembership, setCheckingMembership] = useState(false);
 
-  // Check if user is org member
+  // Check if user is org member and if main admin (mukunds23@iitk.ac.in)
   useEffect(() => {
     if (isAuthenticated && user) {
-      const checkOrgMembership = async () => {
+      const checkAccess = async () => {
         try {
           setCheckingMembership(true);
-          const membershipData = await organizationsAPI.getUserMemberships();
+          const [profileRes, membershipData] = await Promise.all([
+            authAPI.getProfile().catch(() => ({ isMainAdmin: false })),
+            organizationsAPI.getUserMemberships(),
+          ]);
+          setIsMainAdmin(!!(profileRes as any).isMainAdmin);
           setIsOrgMember(membershipData.isMember);
         } catch (err) {
-          console.error('Failed to check org membership:', err);
+          console.error('Failed to check access:', err);
           setIsOrgMember(false);
+          setIsMainAdmin(false);
         } finally {
           setCheckingMembership(false);
         }
       };
-      checkOrgMembership();
+      checkAccess();
     } else {
       setIsOrgMember(false);
+      setIsMainAdmin(false);
     }
   }, [isAuthenticated, user]);
 
@@ -132,9 +139,14 @@ export default function FeedHeader() {
                     <Link to="/profile">
                       <DropdownMenuItem>My Profile</DropdownMenuItem>
                     </Link>
-                    {isOrgMember && (
+                    {isMainAdmin && (
                       <Link to="/admin">
                         <DropdownMenuItem>Admin Dashboard</DropdownMenuItem>
+                      </Link>
+                    )}
+                    {!isMainAdmin && isOrgMember && (
+                      <Link to="/admin">
+                        <DropdownMenuItem>Create Event</DropdownMenuItem>
                       </Link>
                     )}
                     <DropdownMenuItem onClick={() => setShowRequestModal(true)} className="gap-2">
@@ -202,12 +214,20 @@ export default function FeedHeader() {
                       >
                         My Profile
                       </Link>
-                      {isOrgMember && (
+                      {isMainAdmin && (
                         <Link
                           to="/admin"
                           className="py-2 text-sm font-medium hover:text-primary transition-colors"
                         >
                           Admin Dashboard
+                        </Link>
+                      )}
+                      {!isMainAdmin && isOrgMember && (
+                        <Link
+                          to="/admin"
+                          className="py-2 text-sm font-medium hover:text-primary transition-colors"
+                        >
+                          Create Event
                         </Link>
                       )}
                     </>

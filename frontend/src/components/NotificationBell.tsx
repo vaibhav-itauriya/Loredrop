@@ -6,6 +6,7 @@ import {
   Heart,
   Calendar,
   Users,
+  Shield,
   CheckCheck,
   Loader2,
 } from "lucide-react";
@@ -22,7 +23,8 @@ type NotificationType =
   | "event_comment"
   | "event_like"
   | "new_org_event"
-  | "event_reminder";
+  | "event_reminder"
+  | "access_request";
 
 interface Notification {
   _id: string;
@@ -30,6 +32,7 @@ interface Notification {
   type: NotificationType;
   message: string;
   eventId?: string | { _id: string; title?: string };
+  requestId?: string;
   fromUserId?: { displayName?: string; avatar?: string };
   read: boolean;
   createdAt: string;
@@ -45,6 +48,8 @@ function getNotificationIcon(type: NotificationType) {
       return <Calendar className="w-4 h-4 text-green-500" />;
     case "event_reminder":
       return <Bell className="w-4 h-4 text-amber-500" />;
+    case "access_request":
+      return <Shield className="w-4 h-4 text-violet-500" />;
     default:
       return <Bell className="w-4 h-4 text-muted-foreground" />;
   }
@@ -105,21 +110,24 @@ export default function NotificationBell() {
   }, [open]);
 
   const handleMarkAsRead = async (
-    notificationId: string,
-    eventId?: string | { _id: string }
+    notification: Notification
   ) => {
     try {
-      await interactionsAPI.markNotificationRead(notificationId);
+      await interactionsAPI.markNotificationRead(notification._id);
       setNotifications(
         notifications.map((n) =>
-          n._id === notificationId ? { ...n, read: true } : n
+          n._id === notification._id ? { ...n, read: true } : n
         )
       );
       setUnreadCount(Math.max(0, unreadCount - 1));
-
+      setOpen(false);
+      if (notification.type === "access_request") {
+        navigate("/admin");
+        return;
+      }
+      const eventId = notification.eventId;
       const id = typeof eventId === "object" ? eventId?._id : eventId;
       if (id) {
-        setOpen(false);
         navigate(`/feed?event=${id}`);
       }
     } catch (error) {
@@ -192,12 +200,7 @@ export default function NotificationBell() {
                 <button
                   key={notification._id}
                   type="button"
-                  onClick={() =>
-                    handleMarkAsRead(
-                      notification._id,
-                      notification.eventId
-                    )
-                  }
+                  onClick={() => handleMarkAsRead(notification)}
                   className={cn(
                     "w-full text-left px-4 py-3 flex gap-3 transition-colors hover:bg-muted/50",
                     !notification.read && "bg-primary/5"
