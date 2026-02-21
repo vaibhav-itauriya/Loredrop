@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type ChangeEvent } from 'react';
 import { useAuth } from '@/hooks/use-auth';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button.tsx';
@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label.tsx';
 import { Plus, ArrowLeft, Calendar, Users, X, UserPlus, AlertCircle, Check, XCircle, Shield } from 'lucide-react';
 import { eventsAPI, organizationsAPI, authAPI, organizationRequestsAPI } from '@/lib/api';
 import { Alert, AlertDescription } from '@/components/ui/alert.tsx';
+import { buildOrganizationOptions } from '@/lib/org-hierarchy.ts';
 
 interface Organization {
   _id: string;
@@ -26,6 +27,29 @@ interface PendingRequest {
   requestedAt: string;
 }
 
+interface OrganizationAdminsGroup {
+  organizationId: string;
+  organizationName: string;
+  organizationSlug: string;
+  admins: {
+    membershipId: string;
+    userId: string;
+    name: string;
+    email: string;
+    role: string;
+    joinedAt: string;
+  }[];
+}
+
+interface AnalyticsOverview {
+  summary?: {
+    totalEvents: number;
+    totalSaves: number;
+    totalRsvps: number;
+    totalCheckIns: number;
+  };
+}
+
 export default function AdminPage() {
   const { user, isAuthenticated } = useAuth();
   const [organizations, setOrganizations] = useState<Organization[]>([]);
@@ -40,6 +64,12 @@ export default function AdminPage() {
   const [pendingRequests, setPendingRequests] = useState<PendingRequest[]>([]);
   const [loadingRequests, setLoadingRequests] = useState(false);
   const [actingRequestId, setActingRequestId] = useState<string | null>(null);
+  const [organizationAdmins, setOrganizationAdmins] = useState<OrganizationAdminsGroup[]>([]);
+  const [loadingOrgAdmins, setLoadingOrgAdmins] = useState(false);
+  const [actingOrgAdminId, setActingOrgAdminId] = useState<string | null>(null);
+  const [uploadedImageDataUrl, setUploadedImageDataUrl] = useState<string>('');
+  const [analyticsOverview, setAnalyticsOverview] = useState<AnalyticsOverview | null>(null);
+  const [loadingAnalytics, setLoadingAnalytics] = useState(false);
 
   // Form state for new event
   const [eventForm, setEventForm] = useState({
@@ -51,9 +81,14 @@ export default function AdminPage() {
     imageUrl: '',
     tags: '',
     audience: 'all' as const,
+    isRecurring: false,
+    recurrenceFrequency: 'weekly' as 'weekly' | 'monthly',
+    recurrenceInterval: '1',
+    recurrenceCount: '1',
   });
 
   const [events, setEvents] = useState<any[]>([]);
+  const [timeConflictEvent, setTimeConflictEvent] = useState<any | null>(null);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -105,9 +140,37 @@ export default function AdminPage() {
     }
   };
 
+  const fetchOrganizationAdmins = async () => {
+    try {
+      setLoadingOrgAdmins(true);
+      const data = await organizationsAPI.getOrganizationAdmins();
+      setOrganizationAdmins(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error('Failed to fetch organization admins:', err);
+      setOrganizationAdmins([]);
+    } finally {
+      setLoadingOrgAdmins(false);
+    }
+  };
+
+  const fetchAnalyticsOverview = async () => {
+    try {
+      setLoadingAnalytics(true);
+      const data = await organizationsAPI.getMainAdminAnalytics();
+      setAnalyticsOverview(data);
+    } catch (err) {
+      console.error('Failed to fetch analytics overview:', err);
+      setAnalyticsOverview(null);
+    } finally {
+      setLoadingAnalytics(false);
+    }
+  };
+
   useEffect(() => {
     if (isAuthenticated && isMainAdmin) {
       fetchPendingRequests();
+      fetchOrganizationAdmins();
+      fetchAnalyticsOverview();
     }
   }, [isAuthenticated, isMainAdmin]);
 
@@ -164,11 +227,81 @@ export default function AdminPage() {
     e.preventDefault();
     if (!selectedOrg) return;
 
+    const selectedTime = eventForm.dateTime ? new Date(eventForm.dateTime).getTime() : null;
+    const conflictingEvent = selectedTime
+      ? events.find((event) => new Date(event.dateTime).getTime() === selectedTime)
+      : null;
+
+    if (conflictingEvent) {
+      setTimeConflictEvent(conflictingEvent);
+      return;
+    }
+
+    await submitEvent(false);
+  };
+
+  const handleRemoveOrganizationAdmin = async (membershipId: string) => {
+    try {
+      setActingOrgAdminId(membershipId);
+      await organizationsAPI.removeOrganizationAdmin(membershipId);
+      setSuccessMessage('Admin access removed.');
+      await fetchOrganizationAdmins();
+      setTimeout(() => setSuccessMessage(null), 3000);
+    } catch (err: any) {
+      setError(err?.message || 'Failed to remove admin');
+    } finally {
+      setActingOrgAdminId(null);
+    }
+  };
+
+  const handleEventImageFileChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      setError('Please select a valid image file');
+      return;
+    }
+
+    const maxBytes = 5 * 1024 * 1024;
+    if (file.size > maxBytes) {
+      setError('Image size should be less than 5MB');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === 'string') {
+        setUploadedImageDataUrl(reader.result);
+      }
+    };
+    reader.onerror = () => setError('Failed to read image file');
+    reader.readAsDataURL(file);
+  };
+
+  const clearEventImage = () => {
+    setUploadedImageDataUrl('');
+    setEventForm((prev) => ({ ...prev, imageUrl: '' }));
+    const fileInput = document.getElementById('eventImageFile') as HTMLInputElement | null;
+    if (fileInput) fileInput.value = '';
+  };
+
+  const submitEvent = async (allowTimeConflict: boolean) => {
+    if (!selectedOrg) return;
+
     try {
       setLoading(true);
       setError(null);
 
       const token = localStorage.getItem('authToken');
+      const eventImage = uploadedImageDataUrl || eventForm.imageUrl;
+      const recurrencePayload = eventForm.isRecurring
+        ? {
+            frequency: eventForm.recurrenceFrequency,
+            interval: Number(eventForm.recurrenceInterval) || 1,
+            count: Number(eventForm.recurrenceCount) || 1,
+          }
+        : undefined;
       const response = await fetch(`${import.meta.env.VITE_API_URL}/events`, {
         method: 'POST',
         headers: {
@@ -180,23 +313,35 @@ export default function AdminPage() {
           description: eventForm.description,
           location: eventForm.location,
           dateTime: new Date(eventForm.dateTime).toISOString(),
-          capacity: parseInt(eventForm.capacity),
+          capacity: eventForm.capacity ? parseInt(eventForm.capacity, 10) : undefined,
           organizationId: selectedOrg._id,
-          media: eventForm.imageUrl ? [{ type: 'image', url: eventForm.imageUrl }] : [],
+          media: eventImage ? [{ type: 'image', url: eventImage }] : [],
           tags: eventForm.tags.split(',').map(t => t.trim()).filter(t => t),
           audience: eventForm.audience,
           isPublished: true,
+          allowTimeConflict,
+          recurrence: recurrencePayload,
         }),
       });
 
       if (response.ok) {
         setSuccessMessage('Event created successfully!');
-        setEventForm({ title: '', description: '', location: '', dateTime: '', capacity: '', imageUrl: '', tags: '', audience: 'all' });
+        setTimeConflictEvent(null);
+        setUploadedImageDataUrl('');
+        setEventForm({ title: '', description: '', location: '', dateTime: '', capacity: '', imageUrl: '', tags: '', audience: 'all', isRecurring: false, recurrenceFrequency: 'weekly', recurrenceInterval: '1', recurrenceCount: '1' });
         fetchEvents(selectedOrg._id);
         setTimeout(() => setSuccessMessage(null), 3000);
       } else {
-        const error = await response.json();
-        setError(error.message || 'Failed to create event');
+        const errorData = await response.json().catch(() => ({}));
+        if (response.status === 409 && errorData?.code === 'EVENT_TIME_CONFLICT') {
+          const selectedTime = eventForm.dateTime ? new Date(eventForm.dateTime).getTime() : null;
+          const conflictingEvent = selectedTime
+            ? events.find((event) => new Date(event.dateTime).getTime() === selectedTime)
+            : null;
+          setTimeConflictEvent(conflictingEvent || { title: 'Another event' });
+        } else {
+          setError(errorData.error || 'Failed to create event');
+        }
       }
     } catch (err) {
       setError('An error occurred while creating the event');
@@ -383,6 +528,97 @@ export default function AdminPage() {
           </Card>
         )}
 
+        {isMainAdmin && (
+          <Card className="mb-6">
+            <CardHeader>
+              <CardTitle>Analytics Overview</CardTitle>
+              <CardDescription>
+                Platform-level trends: reach, saves, RSVP, and attendance.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {loadingAnalytics ? (
+                <p className="text-muted-foreground text-sm">Loading analytics...</p>
+              ) : !analyticsOverview?.summary ? (
+                <p className="text-muted-foreground text-sm">No analytics available</p>
+              ) : (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <div className="rounded-md border p-3">
+                    <p className="text-xs text-muted-foreground">Total Events</p>
+                    <p className="text-xl font-semibold">{analyticsOverview.summary.totalEvents}</p>
+                  </div>
+                  <div className="rounded-md border p-3">
+                    <p className="text-xs text-muted-foreground">Calendar Saves</p>
+                    <p className="text-xl font-semibold">{analyticsOverview.summary.totalSaves}</p>
+                  </div>
+                  <div className="rounded-md border p-3">
+                    <p className="text-xs text-muted-foreground">RSVPs</p>
+                    <p className="text-xl font-semibold">{analyticsOverview.summary.totalRsvps}</p>
+                  </div>
+                  <div className="rounded-md border p-3">
+                    <p className="text-xs text-muted-foreground">Check-ins</p>
+                    <p className="text-xl font-semibold">{analyticsOverview.summary.totalCheckIns}</p>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {isMainAdmin && (
+          <Card className="mb-6">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Users className="w-5 h-5" />
+                Organization Admins
+              </CardTitle>
+              <CardDescription>
+                View who is admin in each organization and remove admin access when needed.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {loadingOrgAdmins ? (
+                <p className="text-muted-foreground text-sm">Loading organization admins...</p>
+              ) : organizationAdmins.length === 0 ? (
+                <p className="text-muted-foreground text-sm">No organizations found</p>
+              ) : (
+                <div className="space-y-4">
+                  {organizationAdmins.map((org) => (
+                    <div key={org.organizationId} className="rounded-lg border p-3">
+                      <div className="mb-3">
+                        <p className="font-medium">{org.organizationName}</p>
+                        <p className="text-xs text-muted-foreground">{org.organizationSlug}</p>
+                      </div>
+                      {org.admins.length === 0 ? (
+                        <p className="text-sm text-muted-foreground">No admins assigned</p>
+                      ) : (
+                        <div className="space-y-2">
+                          {org.admins.map((admin) => (
+                            <div key={admin.membershipId} className="flex flex-wrap items-center justify-between gap-2 rounded-md border p-2">
+                              <div>
+                                <p className="text-sm font-medium">{admin.name}</p>
+                                <p className="text-xs text-muted-foreground">{admin.email || 'No email'} • {admin.role}</p>
+                              </div>
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                onClick={() => handleRemoveOrganizationAdmin(admin.membershipId)}
+                                disabled={actingOrgAdminId === admin.membershipId || admin.role === 'owner'}
+                              >
+                                {admin.role === 'owner' ? 'Owner' : 'Remove Admin'}
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
         {!isOrgMember && (
           <Alert className="mb-6">
             <AlertDescription>
@@ -406,6 +642,7 @@ export default function AdminPage() {
                     key={org._id}
                     onClick={() => {
                       setSelectedOrg(org);
+                      setTimeConflictEvent(null);
                       fetchEvents(org._id);
                     }}
                     className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${
@@ -463,20 +700,30 @@ export default function AdminPage() {
                     />
                   </div>
 
-                  <div>
-                    <Label htmlFor="imageUrl">Event Image URL</Label>
+                  <div className="space-y-2">
+                    <Label htmlFor="eventImageFile">Event Image</Label>
+                    <Input
+                      id="eventImageFile"
+                      type="file"
+                      accept="image/*"
+                      onChange={handleEventImageFileChange}
+                    />
+                    <p className="text-xs text-muted-foreground">You can upload from device or paste an image URL below.</p>
                     <Input
                       id="imageUrl"
                       placeholder="https://example.com/image.jpg"
                       value={eventForm.imageUrl}
-                      onChange={(e) => setEventForm({ ...eventForm, imageUrl: e.target.value })}
+                      onChange={(e) => {
+                        setEventForm({ ...eventForm, imageUrl: e.target.value });
+                        if (e.target.value) setUploadedImageDataUrl('');
+                      }}
                     />
-                    {eventForm.imageUrl && (
+                    {(uploadedImageDataUrl || eventForm.imageUrl) && (
                       <div className="mt-2 relative inline-block">
-                        <img src={eventForm.imageUrl} alt="Event preview" className="h-20 w-20 object-cover rounded-lg" />
+                        <img src={uploadedImageDataUrl || eventForm.imageUrl} alt="Event preview" className="h-20 w-20 object-cover rounded-lg" />
                         <button
                           type="button"
-                          onClick={() => setEventForm({ ...eventForm, imageUrl: '' })}
+                          onClick={clearEventImage}
                           className="absolute -top-2 -right-2 bg-destructive text-white rounded-full p-1 hover:bg-destructive/90"
                         >
                           <X className="w-3 h-3" />
@@ -542,10 +789,96 @@ export default function AdminPage() {
                       id="dateTime"
                       type="datetime-local"
                       value={eventForm.dateTime}
-                      onChange={(e) => setEventForm({ ...eventForm, dateTime: e.target.value })}
+                      onChange={(e) => {
+                        setEventForm({ ...eventForm, dateTime: e.target.value });
+                        setTimeConflictEvent(null);
+                      }}
                       required
                     />
                   </div>
+
+                  <div className="rounded-md border p-3 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="isRecurring">Recurring Event</Label>
+                      <input
+                        id="isRecurring"
+                        type="checkbox"
+                        checked={eventForm.isRecurring}
+                        onChange={(e) => setEventForm({ ...eventForm, isRecurring: e.target.checked })}
+                      />
+                    </div>
+                    {eventForm.isRecurring && (
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div>
+                          <Label htmlFor="recurrenceFrequency">Frequency</Label>
+                          <select
+                            id="recurrenceFrequency"
+                            value={eventForm.recurrenceFrequency}
+                            onChange={(e) => setEventForm({ ...eventForm, recurrenceFrequency: e.target.value as 'weekly' | 'monthly' })}
+                            className="w-full px-3 py-2 border border-input rounded-md bg-background"
+                          >
+                            <option value="weekly">Weekly</option>
+                            <option value="monthly">Monthly</option>
+                          </select>
+                        </div>
+                        <div>
+                          <Label htmlFor="recurrenceInterval">Every</Label>
+                          <Input
+                            id="recurrenceInterval"
+                            type="number"
+                            min={1}
+                            value={eventForm.recurrenceInterval}
+                            onChange={(e) => setEventForm({ ...eventForm, recurrenceInterval: e.target.value })}
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="recurrenceCount">Occurrences</Label>
+                          <Input
+                            id="recurrenceCount"
+                            type="number"
+                            min={1}
+                            max={52}
+                            value={eventForm.recurrenceCount}
+                            onChange={(e) => setEventForm({ ...eventForm, recurrenceCount: e.target.value })}
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {timeConflictEvent && (
+                    <Alert className="border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30">
+                      <AlertDescription>
+                        <div className="space-y-3">
+                          <p>
+                            An event already exists at this same date and time
+                            {timeConflictEvent?.title ? ` ("${timeConflictEvent.title}")` : ''}.
+                          </p>
+                          <div className="flex flex-wrap gap-2">
+                            <Button
+                              type="button"
+                              onClick={() => submitEvent(true)}
+                              disabled={loading}
+                            >
+                              Keep Same Timing
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={() => {
+                                setTimeConflictEvent(null);
+                                const input = document.getElementById('dateTime') as HTMLInputElement | null;
+                                input?.focus();
+                              }}
+                              disabled={loading}
+                            >
+                              Change Time
+                            </Button>
+                          </div>
+                        </div>
+                      </AlertDescription>
+                    </Alert>
+                  )}
 
                   <Button type="submit" disabled={loading} className="w-full">
                     {loading ? 'Creating...' : 'Create Event'}
@@ -654,6 +987,8 @@ function OrganizationRequestForm({ onClose, onSuccess }: { onClose: () => void; 
     return <p className="text-sm text-muted-foreground">Loading organizations...</p>;
   }
 
+  const options = buildOrganizationOptions(organizations);
+
   return (
     <div className="space-y-3">
       {error && (
@@ -668,9 +1003,9 @@ function OrganizationRequestForm({ onClose, onSuccess }: { onClose: () => void; 
         disabled={isLoading}
       >
         <option value="">Select an organization</option>
-        {organizations.map((org) => (
-          <option key={org._id} value={org._id}>
-            {org.name}
+        {options.map((opt) => (
+          <option key={opt.id} value={opt.id} disabled={opt.disabled}>
+            {opt.label}
           </option>
         ))}
       </select>

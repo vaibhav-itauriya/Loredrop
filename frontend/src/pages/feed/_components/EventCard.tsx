@@ -1,5 +1,6 @@
 import { format, isPast, isToday, isTomorrow } from "date-fns";
 import { useState, useEffect, useMemo, memo } from "react";
+import { Link } from "react-router-dom";
 import { Card } from "@/components/ui/card.tsx";
 import { Badge } from "@/components/ui/badge.tsx";
 import { Button } from "@/components/ui/button.tsx";
@@ -115,6 +116,7 @@ function EventCard({ event }: EventCardProps) {
       setIsLoading(true);
       await interactionsAPI.toggleCalendarSave(event._id);
       setHasCalendarSave(!hasCalendarSave);
+      window.dispatchEvent(new CustomEvent("calendar-save-updated"));
       toast.success(hasCalendarSave ? "Removed from calendar" : "Added to calendar");
     } catch (error) {
       console.error("Failed to save to calendar:", error);
@@ -205,28 +207,52 @@ function EventCard({ event }: EventCardProps) {
       )}
 
       {/* Content */}
-      <div className="p-5 space-y-4">
+      <div className="p-4 sm:p-5 space-y-4">
         {/* Organization & Date */}
         <div className="flex items-start justify-between gap-3">
-          <div className="flex items-center gap-3 min-w-0">
-            {org?.logo && (
-              <img
-                src={org.logo}
-                alt={org.name}
-                className="w-10 h-10 rounded-lg flex-shrink-0"
-                loading="lazy"
-                decoding="async"
-              />
-            )}
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-medium text-muted-foreground truncate">
-                {org?.name || "Unknown Organization"}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                {author?.name || author?.displayName || "Unknown Author"}
-              </p>
+            <div className="flex items-center gap-3 min-w-0">
+              {org?.slug ? (
+                <Link to={`/organizations/${org.slug}`} className="flex items-center gap-3 min-w-0 group">
+                  {org?.logo && (
+                    <img
+                      src={org.logo}
+                      alt={org.name}
+                      className="w-10 h-10 rounded-lg flex-shrink-0"
+                      loading="lazy"
+                      decoding="async"
+                    />
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-muted-foreground truncate group-hover:text-foreground transition-colors">
+                      {org?.name || "Unknown Organization"}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {author?.name || author?.displayName || "Unknown Author"}
+                    </p>
+                  </div>
+                </Link>
+              ) : (
+                <>
+                  {org?.logo && (
+                    <img
+                      src={org.logo}
+                      alt={org.name}
+                      className="w-10 h-10 rounded-lg flex-shrink-0"
+                      loading="lazy"
+                      decoding="async"
+                    />
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-muted-foreground truncate">
+                      {org?.name || "Unknown Organization"}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {author?.name || author?.displayName || "Unknown Author"}
+                    </p>
+                  </div>
+                </>
+              )}
             </div>
-          </div>
           <Badge variant="secondary" className="flex-shrink-0">
             {eventDateLabel}
           </Badge>
@@ -234,7 +260,7 @@ function EventCard({ event }: EventCardProps) {
 
         {/* Title & Description */}
         <div className="space-y-2">
-          <h3 className="text-lg font-semibold leading-tight">{event.title}</h3>
+          <h3 className="text-base sm:text-lg font-semibold leading-tight">{event.title}</h3>
           <p className="text-sm text-muted-foreground line-clamp-2">
             {event.description}
           </p>

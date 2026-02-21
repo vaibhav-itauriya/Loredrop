@@ -32,7 +32,7 @@ app.use(cors({
   },
   credentials: true,
 }));
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
 
 // Initialize Firebase Admin SDK
 const firebaseCredentials = {

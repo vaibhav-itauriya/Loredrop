@@ -20,6 +20,7 @@ export interface IOrganization extends Document {
   slug: string;
   description: string;
   type: 'council' | 'club' | 'festival' | 'department' | 'other';
+  parentOrganizationId?: mongoose.Types.ObjectId;
   logo?: string;
   coverImage?: string;
   isVerified: boolean;
@@ -35,8 +36,19 @@ export interface IEvent extends Document {
   authorId: mongoose.Types.ObjectId;
   dateTime: Date;
   endDateTime?: Date;
+  seriesId?: mongoose.Types.ObjectId;
+  recurrence?: {
+    frequency: 'weekly' | 'monthly';
+    interval: number;
+    count?: number;
+    until?: Date;
+    occurrenceIndex: number;
+  };
   venue: string;
   mode: 'online' | 'offline' | 'hybrid';
+  capacity?: number;
+  rsvpCount: number;
+  waitlistCount: number;
   tags: string[];
   audience: ('ug' | 'pg' | 'phd' | 'faculty' | 'staff' | 'all')[];
   media: {
@@ -85,7 +97,7 @@ export interface INotification extends Document {
 export interface IOrganizationMember extends Document {
   organizationId: mongoose.Types.ObjectId;
   userId: mongoose.Types.ObjectId;
-  role: 'admin' | 'moderator' | 'member';
+  role: 'owner' | 'admin' | 'moderator' | 'member';
   joinedAt: Date;
 }
 
@@ -103,6 +115,26 @@ export interface IOrganizationRequest extends Document {
   requestedAt: Date;
   respondedAt?: Date;
 }
+
+export interface IEventRSVP extends Document {
+  eventId: mongoose.Types.ObjectId;
+  userId: mongoose.Types.ObjectId;
+  status: 'rsvp' | 'waitlist' | 'checked_in';
+  checkedInAt?: Date;
+  checkInToken: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface IAuditLog extends Document {
+  actorUserId?: mongoose.Types.ObjectId;
+  action: string;
+  entityType: 'event' | 'organization_member' | 'organization_request' | 'rsvp' | 'system';
+  entityId?: mongoose.Types.ObjectId;
+  organizationId?: mongoose.Types.ObjectId;
+  metadata?: Record<string, any>;
+  createdAt: Date;
+ }
 
 // Schemas
 const UserSchema = new Schema<IUser>(
@@ -127,6 +159,7 @@ const OrganizationSchema = new Schema<IOrganization>(
     slug: { type: String, required: true, unique: true },
     description: { type: String, required: true },
     type: { type: String, enum: ['council', 'club', 'festival', 'department', 'other'], required: true },
+    parentOrganizationId: { type: Schema.Types.ObjectId, ref: 'Organization' },
     logo: String,
     coverImage: String,
     isVerified: { type: Boolean, default: false },
@@ -143,8 +176,19 @@ const EventSchema = new Schema<IEvent>(
     authorId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     dateTime: { type: Date, required: true },
     endDateTime: Date,
+    seriesId: { type: Schema.Types.ObjectId, ref: 'Event' },
+    recurrence: {
+      frequency: { type: String, enum: ['weekly', 'monthly'] },
+      interval: { type: Number, min: 1 },
+      count: { type: Number, min: 1 },
+      until: Date,
+      occurrenceIndex: { type: Number, default: 0 },
+    },
     venue: { type: String, required: true },
     mode: { type: String, enum: ['online', 'offline', 'hybrid'], required: true },
+    capacity: { type: Number, min: 0 },
+    rsvpCount: { type: Number, default: 0 },
+    waitlistCount: { type: Number, default: 0 },
     tags: [String],
     audience: [{ type: String, enum: ['ug', 'pg', 'phd', 'faculty', 'staff', 'all'] }],
     media: [
@@ -213,7 +257,7 @@ const OrganizationMemberSchema = new Schema<IOrganizationMember>(
   {
     organizationId: { type: Schema.Types.ObjectId, ref: 'Organization', required: true },
     userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
-    role: { type: String, enum: ['admin', 'moderator', 'member'], default: 'member' },
+    role: { type: String, enum: ['owner', 'admin', 'moderator', 'member'], default: 'member' },
     joinedAt: { type: Date, default: Date.now },
   },
   { timestamps: true }
@@ -250,6 +294,38 @@ OrganizationRequestSchema.index({ userId: 1, organizationId: 1 }, { unique: true
 OrganizationRequestSchema.index({ organizationId: 1 });
 OrganizationRequestSchema.index({ status: 1 });
 
+const EventRSVPSchema = new Schema<IEventRSVP>(
+  {
+    eventId: { type: Schema.Types.ObjectId, ref: 'Event', required: true },
+    userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    status: { type: String, enum: ['rsvp', 'waitlist', 'checked_in'], required: true, default: 'rsvp' },
+    checkedInAt: Date,
+    checkInToken: { type: String, required: true },
+  },
+  { timestamps: true }
+);
+
+EventRSVPSchema.index({ eventId: 1, userId: 1 }, { unique: true });
+EventRSVPSchema.index({ eventId: 1, status: 1, createdAt: 1 });
+EventSchema.index({ organizationId: 1, dateTime: 1, isPublished: 1 });
+EventSchema.index({ seriesId: 1, 'recurrence.occurrenceIndex': 1 });
+
+const AuditLogSchema = new Schema<IAuditLog>(
+  {
+    actorUserId: { type: Schema.Types.ObjectId, ref: 'User' },
+    action: { type: String, required: true },
+    entityType: { type: String, enum: ['event', 'organization_member', 'organization_request', 'rsvp', 'system'], required: true },
+    entityId: { type: Schema.Types.ObjectId },
+    organizationId: { type: Schema.Types.ObjectId, ref: 'Organization' },
+    metadata: { type: Schema.Types.Mixed },
+  },
+  { timestamps: { createdAt: true, updatedAt: false } }
+);
+
+AuditLogSchema.index({ createdAt: -1 });
+AuditLogSchema.index({ organizationId: 1, createdAt: -1 });
+AuditLogSchema.index({ action: 1, createdAt: -1 });
+
 // Export Models
 export const User = mongoose.model<IUser>('User', UserSchema);
 export const Organization = mongoose.model<IOrganization>('Organization', OrganizationSchema);
@@ -261,3 +337,5 @@ export const Notification = mongoose.model<INotification>('Notification', Notifi
 export const OrganizationMember = mongoose.model<IOrganizationMember>('OrganizationMember', OrganizationMemberSchema);
 export const VerificationCode = mongoose.model<IVerificationCode>('VerificationCode', VerificationCodeSchema);
 export const OrganizationRequest = mongoose.model<IOrganizationRequest>('OrganizationRequest', OrganizationRequestSchema);
+export const EventRSVP = mongoose.model<IEventRSVP>('EventRSVP', EventRSVPSchema);
+export const AuditLog = mongoose.model<IAuditLog>('AuditLog', AuditLogSchema);

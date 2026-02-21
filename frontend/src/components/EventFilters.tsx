@@ -10,6 +10,7 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet.tsx";
 import { cn } from "@/lib/utils.ts";
+import { groupOrganizations, type OrganizationLike } from "@/lib/org-hierarchy.ts";
 
 export interface FilterOptions {
   dateRange?: "today" | "tomorrow" | "week" | "month" | "all";
@@ -353,19 +354,69 @@ function FilterFormContent({
         <div>
           <h3 className="font-semibold text-sm mb-3">Organizations</h3>
           <div className="space-y-2 max-h-48 overflow-y-auto pr-2">
-            {organizations.map((org) => (
-              <Button
-                key={org._id}
-                variant={
-                  filters.organizations?.includes(org._id) ? "default" : "outline"
-                }
-                size="sm"
-                onClick={() => onOrgToggle(org._id)}
-                className="w-full justify-start"
-              >
-                {org.name}
-              </Button>
-            ))}
+            {(() => {
+              const { councils, festivals, others, clubsByCouncil, orphanClubs } = groupOrganizations(organizations as OrganizationLike[]);
+              const renderOrgButton = (org: OrganizationLike, className?: string) => (
+                <Button
+                  key={org._id}
+                  variant={
+                    filters.organizations?.includes(org._id) ? "default" : "outline"
+                  }
+                  size="sm"
+                  onClick={() => onOrgToggle(org._id)}
+                  className={cn("w-full justify-start", className)}
+                >
+                  {org.name}
+                </Button>
+              );
+
+              return (
+                <div className="space-y-3">
+                  {councils.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                        Councils
+                      </p>
+                      {councils.map((c) => (
+                        <div key={c._id} className="space-y-1">
+                          {renderOrgButton(c)}
+                          {(clubsByCouncil.get(c._id) || []).map((club) =>
+                            renderOrgButton(club, "ml-4 text-xs")
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {orphanClubs.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                        Clubs
+                      </p>
+                      {orphanClubs.map((c) => renderOrgButton(c))}
+                    </div>
+                  )}
+
+                  {festivals.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                        Festivals
+                      </p>
+                      {festivals.map((f) => renderOrgButton(f))}
+                    </div>
+                  )}
+
+                  {others.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                        Others
+                      </p>
+                      {others.map((o) => renderOrgButton(o))}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
           </div>
         </div>
       )}

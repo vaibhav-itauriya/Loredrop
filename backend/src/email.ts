@@ -58,13 +58,13 @@ export async function sendVerificationEmail(email: string, code: string): Promis
     const mailOptions = {
       from: process.env.EMAIL_FROM || process.env.SMTP_USER || 'noreply@loredrop.com',
       to: email,
-      subject: 'LoredROP Verification Code',
+      subject: 'LoreDrop Verification Code',
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
           <div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px;">
             <h2 style="color: #333; margin-top: 0;">Email Verification</h2>
             <p style="color: #666; font-size: 16px;">
-              Your LoredROP verification code is:
+              Your LoreDrop verification code is:
             </p>
             <div style="background-color: #fff; border: 2px solid #007bff; border-radius: 6px; padding: 15px; text-align: center; margin: 20px 0;">
               <span style="font-size: 32px; font-weight: bold; letter-spacing: 5px; color: #007bff;">
@@ -79,12 +79,12 @@ export async function sendVerificationEmail(email: string, code: string): Promis
             </p>
             <hr style="border: none; border-top: 1px solid #ddd; margin: 20px 0;">
             <p style="color: #999; font-size: 12px; text-align: center;">
-              LoredROP - Campus Event Platform
+              LoreDrop - Campus Event Platform
             </p>
           </div>
         </div>
       `,
-      text: `Your LoredROP verification code is: ${code}\n\nThis code will expire in 15 minutes.`,
+      text: `Hey ${email}, Your LoredROP verification code is: ${code}\n\nThis code will expire in 15 minutes.`,
     };
 
     let info;

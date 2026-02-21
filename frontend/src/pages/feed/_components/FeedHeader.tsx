@@ -2,12 +2,12 @@ import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button.tsx";
 import { SignInButton } from "@/components/ui/signin.tsx";
 import { useAuth } from "@/hooks/use-auth.ts";
-import { Zap, Search, Menu, Moon, Sun, UserPlus, LogOut } from "lucide-react";
+import { Zap, Menu, Moon, Sun, UserPlus, LogOut } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useTheme } from "next-themes";
 import NotificationBell from "@/components/NotificationBell.tsx";
-import { SearchBar } from "@/components/SearchBar.tsx";
 import { organizationsAPI, authAPI } from "@/lib/api";
+import { buildOrganizationOptions } from "@/lib/org-hierarchy.ts";
 import {
   Sheet,
   SheetContent,
@@ -23,7 +23,6 @@ import {
 export default function FeedHeader() {
   const { user, isAuthenticated, removeUser } = useAuth();
   const navigate = useNavigate();
-  const [searchOpen, setSearchOpen] = useState(false);
   const { theme, setTheme } = useTheme();
   const [isOrgMember, setIsOrgMember] = useState(false);
   const [isMainAdmin, setIsMainAdmin] = useState(false);
@@ -88,26 +87,8 @@ export default function FeedHeader() {
             </span>
           </Link>
 
-          {/* Search - Desktop */}
-          <div className="hidden md:flex flex-1 max-w-md mx-8">
-            <SearchBar
-              placeholder="Search events, organizations, tags..."
-              className="w-full"
-            />
-          </div>
-
           {/* Actions */}
           <div className="flex items-center gap-2">
-            {/* Mobile Search */}
-            <Button
-              variant="ghost"
-              size="icon"
-              className="md:hidden"
-              onClick={() => setSearchOpen(!searchOpen)}
-            >
-              <Search className="w-5 h-5" />
-            </Button>
-
             {/* Theme Toggle */}
             <Button
               variant="ghost"
@@ -238,16 +219,6 @@ export default function FeedHeader() {
           </div>
         </div>
 
-        {/* Mobile Search Bar */}
-        {searchOpen && (
-          <div className="md:hidden pb-4">
-            <SearchBar
-              placeholder="Search events, organizations..."
-              autoFocus
-              compact
-            />
-          </div>
-        )}
       </div>
 
       {/* Request Organization Modal */}
@@ -329,6 +300,8 @@ function OrganizationRequestForm({ onClose }: { onClose: () => void }) {
     return <p className="text-sm text-muted-foreground">Loading organizations...</p>;
   }
 
+  const options = buildOrganizationOptions(organizations);
+
   return (
     <div className="space-y-3">
       <select
@@ -337,9 +310,9 @@ function OrganizationRequestForm({ onClose }: { onClose: () => void }) {
         className="w-full px-3 py-2 rounded-lg bg-background border border-input text-sm"
       >
         <option value="">Select an organization</option>
-        {organizations.map((org) => (
-          <option key={org._id} value={org._id}>
-            {org.name}
+        {options.map((opt) => (
+          <option key={opt.id} value={opt.id} disabled={opt.disabled}>
+            {opt.label}
           </option>
         ))}
       </select>

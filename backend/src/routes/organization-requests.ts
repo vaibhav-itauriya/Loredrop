@@ -2,6 +2,8 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { authMiddleware } from '../middleware';
 import { OrganizationRequest, OrganizationMember, Organization, User, Notification } from '../models';
 import mongoose from 'mongoose';
+import { canOrgAction } from '../permissions';
+import { logAudit } from '../audit';
 
 const MAIN_ADMIN_EMAIL = 'mukunds23@iitk.ac.in';
 
@@ -59,6 +61,16 @@ router.post('/approve/:requestId', authMiddleware, mainAdminOnlyMiddleware, asyn
     request.status = 'approved';
     request.respondedAt = new Date();
     await request.save();
+    await logAudit({
+      actorUserId: req.userId,
+      action: 'organization_request.approved_main_admin',
+      entityType: 'organization_request',
+      entityId: request._id,
+      organizationId: orgId,
+      metadata: {
+        requestedUserId: request.userId,
+      },
+    });
 
     res.json({ success: true, message: 'Request approved' });
   } catch (error) {
@@ -82,6 +94,16 @@ router.post('/reject/:requestId', authMiddleware, mainAdminOnlyMiddleware, async
     request.status = 'rejected';
     request.respondedAt = new Date();
     await request.save();
+    await logAudit({
+      actorUserId: req.userId,
+      action: 'organization_request.rejected_main_admin',
+      entityType: 'organization_request',
+      entityId: request._id,
+      organizationId: request.organizationId,
+      metadata: {
+        requestedUserId: request.userId,
+      },
+    });
 
     res.json({ success: true, message: 'Request rejected' });
   } catch (error) {
@@ -158,15 +180,13 @@ router.get('/:orgId/pending-requests', authMiddleware, async (req: Request, res:
   try {
     const { orgId } = req.params;
     const userId = req.userId;
+    if (!userId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
 
     // Check if user is admin of this organization
-    const isAdmin = await OrganizationMember.findOne({
-      organizationId: new mongoose.Types.ObjectId(orgId),
-      userId: new mongoose.Types.ObjectId(userId),
-      role: 'admin',
-    });
-
-    if (!isAdmin) {
+    const permission = await canOrgAction(userId, orgId, 'manage_requests');
+    if (!permission.allowed) {
       return res.status(403).json({ error: 'Not an admin of this organization' });
     }
 
@@ -189,15 +209,13 @@ router.post('/:orgId/approve-request/:requestId', authMiddleware, async (req: Re
   try {
     const { orgId, requestId } = req.params;
     const userId = req.userId;
+    if (!userId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
 
     // Check if user is admin
-    const isAdmin = await OrganizationMember.findOne({
-      organizationId: new mongoose.Types.ObjectId(orgId),
-      userId: new mongoose.Types.ObjectId(userId),
-      role: 'admin',
-    });
-
-    if (!isAdmin) {
+    const permission = await canOrgAction(userId, orgId, 'manage_requests');
+    if (!permission.allowed) {
       return res.status(403).json({ error: 'Not an admin' });
     }
 
@@ -218,6 +236,17 @@ router.post('/:orgId/approve-request/:requestId', authMiddleware, async (req: Re
     request.status = 'approved';
     request.respondedAt = new Date();
     await request.save();
+    await logAudit({
+      actorUserId: userId,
+      action: 'organization_request.approved_org_admin',
+      entityType: 'organization_request',
+      entityId: request._id,
+      organizationId: orgId,
+      metadata: {
+        requestedUserId: request.userId,
+        actorRole: permission.role,
+      },
+    });
 
     res.json({
       success: true,
@@ -234,15 +263,13 @@ router.post('/:orgId/reject-request/:requestId', authMiddleware, async (req: Req
   try {
     const { orgId, requestId } = req.params;
     const userId = req.userId;
+    if (!userId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
 
     // Check if user is admin
-    const isAdmin = await OrganizationMember.findOne({
-      organizationId: new mongoose.Types.ObjectId(orgId),
-      userId: new mongoose.Types.ObjectId(userId),
-      role: 'admin',
-    });
-
-    if (!isAdmin) {
+    const permission = await canOrgAction(userId, orgId, 'manage_requests');
+    if (!permission.allowed) {
       return res.status(403).json({ error: 'Not an admin' });
     }
 
@@ -254,6 +281,17 @@ router.post('/:orgId/reject-request/:requestId', authMiddleware, async (req: Req
     request.status = 'rejected';
     request.respondedAt = new Date();
     await request.save();
+    await logAudit({
+      actorUserId: userId,
+      action: 'organization_request.rejected_org_admin',
+      entityType: 'organization_request',
+      entityId: request._id,
+      organizationId: orgId,
+      metadata: {
+        requestedUserId: request.userId,
+        actorRole: permission.role,
+      },
+    });
 
     res.json({
       success: true,

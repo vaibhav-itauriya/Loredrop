@@ -23,8 +23,34 @@ async function getAuthToken(): Promise<string | null> {
   return null;
 }
 
-async function fetchWithAuth(url: string, options: RequestInit = {}) {
+type FetchOptions = RequestInit & {
+  cacheTtlMs?: number;
+  disableCache?: boolean;
+};
+
+const DEFAULT_CACHE_TTL_MS = 15_000;
+const responseCache = new Map<string, { expiry: number; data: any }>();
+const inFlight = new Map<string, Promise<any>>();
+
+async function fetchWithAuth(url: string, options: FetchOptions = {}) {
   const token = await getAuthToken();
+  const method = (options.method || "GET").toUpperCase();
+  const cacheTtlMs = options.cacheTtlMs ?? DEFAULT_CACHE_TTL_MS;
+  const disableCache = options.disableCache === true;
+  const cacheKey = `${method}:${url}:${token ?? ""}`;
+
+  if (method === "GET" && !disableCache) {
+    const cached = responseCache.get(cacheKey);
+    if (cached && cached.expiry > Date.now()) {
+      return cached.data;
+    }
+
+    const pending = inFlight.get(cacheKey);
+    if (pending) {
+      return pending;
+    }
+  }
+
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...(options.headers as Record<string, string> || {}),
@@ -34,26 +60,44 @@ async function fetchWithAuth(url: string, options: RequestInit = {}) {
     headers['Authorization'] = `Bearer ${token}`;
   }
 
-  const response = await fetch(url, {
-    ...options,
-    headers,
-  });
+  const { cacheTtlMs: _cacheTtlMs, disableCache: _disableCache, ...fetchOptions } = options;
 
-  if (!response.ok) {
-    let errorMessage = `API error: ${response.status}`;
-    try {
-      const body = await response.json();
-      if (body?.error && typeof body.error === 'string') {
-        errorMessage = body.error;
+  const request = (async () => {
+    const response = await fetch(url, {
+      ...fetchOptions,
+      headers,
+    });
+
+    if (!response.ok) {
+      let errorMessage = `API error: ${response.status}`;
+      try {
+        const body = await response.json();
+        if (body?.error && typeof body.error === 'string') {
+          errorMessage = body.error;
+        }
+      } catch {
+        // Response body wasn't JSON, use status message
       }
-    } catch {
-      // Response body wasn't JSON, use status message
+      console.error('API error:', response.status, errorMessage);
+      throw new Error(errorMessage);
     }
-    console.error('API error:', response.status, errorMessage);
-    throw new Error(errorMessage);
+
+    const data = await response.json();
+    if (method === "GET" && !disableCache) {
+      responseCache.set(cacheKey, { expiry: Date.now() + cacheTtlMs, data });
+    }
+    return data;
+  })();
+
+  if (method === "GET" && !disableCache) {
+    inFlight.set(cacheKey, request);
   }
 
-  return response.json();
+  try {
+    return await request;
+  } finally {
+    inFlight.delete(cacheKey);
+  }
 }
 
 // Events API
@@ -83,10 +127,17 @@ export const eventsAPI = {
     return fetch(`${API_BASE_URL}/organizations`).then(r => r.json());
   },
 
-  search: (query: string, page = 1, limit = 10) => {
-    const params = new URLSearchParams({ q: query, page: String(page), limit: String(limit) });
-    return fetchWithAuth(`${API_BASE_URL}/events/search?${params}`);
+  getByOrganization: (organizationId: string) => {
+    return fetchWithAuth(`${API_BASE_URL}/events/by-organization/${organizationId}`);
   },
+
+  getCalendarRange: (start: string, end: string, organizationId?: string) => {
+    const params = new URLSearchParams({ start, end });
+    if (organizationId) params.append('organizationId', organizationId);
+    return fetchWithAuth(`${API_BASE_URL}/events/calendar/range?${params.toString()}`);
+  },
+
+  getEventIcsUrl: (eventId: string) => `${API_BASE_URL}/events/${eventId}/ics`,
 };
 
 // Interactions API
@@ -141,6 +192,28 @@ export const interactionsAPI = {
       method: 'PATCH',
     });
   },
+
+  rsvp: (eventId: string, action: 'join' | 'leave' = 'join') => {
+    return fetchWithAuth(`${API_BASE_URL}/interactions/rsvp/${eventId}`, {
+      method: 'POST',
+      body: JSON.stringify({ action }),
+    });
+  },
+
+  getRsvpStatus: (eventId: string) => {
+    return fetchWithAuth(`${API_BASE_URL}/interactions/rsvp/${eventId}/status`);
+  },
+
+  getRsvpList: (eventId: string) => {
+    return fetchWithAuth(`${API_BASE_URL}/interactions/rsvp/${eventId}/list`);
+  },
+
+  checkInRsvp: (eventId: string, payload: { token?: string; userId?: string }) => {
+    return fetchWithAuth(`${API_BASE_URL}/interactions/rsvp/${eventId}/check-in`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
 };
 
 // Auth/User API
@@ -187,6 +260,20 @@ export const organizationsAPI = {
 
   getUserMemberships: async () => {
     return fetchWithAuth(`${API_BASE_URL}/organizations/user/memberships`);
+  },
+
+  getOrganizationAdmins: async () => {
+    return fetchWithAuth(`${API_BASE_URL}/organizations/main-admin/organization-admins`);
+  },
+
+  removeOrganizationAdmin: async (membershipId: string) => {
+    return fetchWithAuth(`${API_BASE_URL}/organizations/main-admin/organization-admins/${membershipId}/remove-admin`, {
+      method: 'PATCH',
+    });
+  },
+
+  getMainAdminAnalytics: async () => {
+    return fetchWithAuth(`${API_BASE_URL}/organizations/main-admin/analytics/overview`);
   },
 };
 

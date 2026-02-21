@@ -1,5 +1,6 @@
 import { Button } from "@/components/ui/button.tsx";
 import { cn } from "@/lib/utils.ts";
+import { groupOrganizations } from "@/lib/org-hierarchy.ts";
 
 type Organization = any;
 
@@ -14,16 +15,13 @@ export default function OrganizationFilter({
   selectedId,
   onSelect,
 }: OrganizationFilterProps) {
-  // Group organizations by type
-  const councils = organizations.filter((org) => org.type === "council");
-  const clubs = organizations.filter((org) => org.type === "club");
-  const festivals = organizations.filter((org) => org.type === "festival");
-  const others = organizations.filter(
-    (org) => !["council", "club", "festival"].includes(org.type)
-  );
+  const { councils, festivals, others } = groupOrganizations(organizations);
+  const allClubs = organizations
+    .filter((org) => org.type === "club")
+    .sort((a, b) => a.name.localeCompare(b.name));
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-h-[70vh] overflow-y-auto pr-1 no-scrollbar">
       {/* For You / All */}
       <div>
         <Button
@@ -113,13 +111,13 @@ export default function OrganizationFilter({
       )}
 
       {/* Clubs */}
-      {clubs.length > 0 && (
+      {allClubs.length > 0 && (
         <div>
           <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 px-3">
             Clubs
           </h3>
           <div className="space-y-1">
-            {clubs.map((org) => (
+            {allClubs.map((org) => (
               <Button
                 key={org._id}
                 variant={selectedId === org._id ? "secondary" : "ghost"}
