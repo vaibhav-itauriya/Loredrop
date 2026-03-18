@@ -1,4 +1,4 @@
-import { useState, useEffect, type ChangeEvent } from 'react';
+import { useState, useEffect, useMemo, type ChangeEvent } from 'react';
 import { useAuth } from '@/hooks/use-auth';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button.tsx';
@@ -51,7 +51,7 @@ interface AnalyticsOverview {
 }
 
 export default function AdminPage() {
-  const { user, isAuthenticated } = useAuth();
+  const { isAuthenticated } = useAuth();
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [selectedOrg, setSelectedOrg] = useState<Organization | null>(null);
   const [loading, setLoading] = useState(false);
@@ -67,9 +67,14 @@ export default function AdminPage() {
   const [organizationAdmins, setOrganizationAdmins] = useState<OrganizationAdminsGroup[]>([]);
   const [loadingOrgAdmins, setLoadingOrgAdmins] = useState(false);
   const [actingOrgAdminId, setActingOrgAdminId] = useState<string | null>(null);
+  const [assigningOrgAdmin, setAssigningOrgAdmin] = useState(false);
   const [uploadedImageDataUrl, setUploadedImageDataUrl] = useState<string>('');
   const [analyticsOverview, setAnalyticsOverview] = useState<AnalyticsOverview | null>(null);
   const [loadingAnalytics, setLoadingAnalytics] = useState(false);
+  const [newOrgAdminForm, setNewOrgAdminForm] = useState({
+    email: '',
+    organizationId: '',
+  });
 
   // Form state for new event
   const [eventForm, setEventForm] = useState({
@@ -77,6 +82,7 @@ export default function AdminPage() {
     description: '',
     location: '',
     dateTime: '',
+    endDateTime: '',
     capacity: '',
     imageUrl: '',
     tags: '',
@@ -89,6 +95,26 @@ export default function AdminPage() {
 
   const [events, setEvents] = useState<any[]>([]);
   const [timeConflictEvent, setTimeConflictEvent] = useState<any | null>(null);
+
+  const liveConflicts = useMemo(() => {
+    if (!eventForm.dateTime || !events.length) return [];
+
+    const start = new Date(eventForm.dateTime);
+    if (Number.isNaN(start.getTime())) return [];
+
+    const end = eventForm.endDateTime
+      ? new Date(eventForm.endDateTime)
+      : new Date(start.getTime() + 60 * 60 * 1000);
+    if (Number.isNaN(end.getTime()) || end <= start) return [];
+
+    return events.filter((event) => {
+      const eventStart = new Date(event.dateTime);
+      const eventEnd = event.endDateTime
+        ? new Date(event.endDateTime)
+        : new Date(eventStart.getTime() + 60 * 60 * 1000);
+      return eventStart < end && eventEnd > start;
+    });
+  }, [eventForm.dateTime, eventForm.endDateTime, events]);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -227,10 +253,7 @@ export default function AdminPage() {
     e.preventDefault();
     if (!selectedOrg) return;
 
-    const selectedTime = eventForm.dateTime ? new Date(eventForm.dateTime).getTime() : null;
-    const conflictingEvent = selectedTime
-      ? events.find((event) => new Date(event.dateTime).getTime() === selectedTime)
-      : null;
+    const conflictingEvent = liveConflicts[0] || null;
 
     if (conflictingEvent) {
       setTimeConflictEvent(conflictingEvent);
@@ -251,6 +274,26 @@ export default function AdminPage() {
       setError(err?.message || 'Failed to remove admin');
     } finally {
       setActingOrgAdminId(null);
+    }
+  };
+
+  const handleAssignOrganizationAdmin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      setAssigningOrgAdmin(true);
+      setError(null);
+      await organizationsAPI.assignOrganizationAdmin({
+        email: newOrgAdminForm.email.trim().toLowerCase(),
+        organizationId: newOrgAdminForm.organizationId,
+      });
+      setSuccessMessage('Organization admin assigned successfully.');
+      setNewOrgAdminForm({ email: '', organizationId: '' });
+      await fetchOrganizationAdmins();
+      setTimeout(() => setSuccessMessage(null), 3000);
+    } catch (err: any) {
+      setError(err?.message || 'Failed to assign organization admin');
+    } finally {
+      setAssigningOrgAdmin(false);
     }
   };
 
@@ -313,6 +356,7 @@ export default function AdminPage() {
           description: eventForm.description,
           location: eventForm.location,
           dateTime: new Date(eventForm.dateTime).toISOString(),
+          endDateTime: eventForm.endDateTime ? new Date(eventForm.endDateTime).toISOString() : undefined,
           capacity: eventForm.capacity ? parseInt(eventForm.capacity, 10) : undefined,
           organizationId: selectedOrg._id,
           media: eventImage ? [{ type: 'image', url: eventImage }] : [],
@@ -328,17 +372,13 @@ export default function AdminPage() {
         setSuccessMessage('Event created successfully!');
         setTimeConflictEvent(null);
         setUploadedImageDataUrl('');
-        setEventForm({ title: '', description: '', location: '', dateTime: '', capacity: '', imageUrl: '', tags: '', audience: 'all', isRecurring: false, recurrenceFrequency: 'weekly', recurrenceInterval: '1', recurrenceCount: '1' });
+        setEventForm({ title: '', description: '', location: '', dateTime: '', endDateTime: '', capacity: '', imageUrl: '', tags: '', audience: 'all', isRecurring: false, recurrenceFrequency: 'weekly', recurrenceInterval: '1', recurrenceCount: '1' });
         fetchEvents(selectedOrg._id);
         setTimeout(() => setSuccessMessage(null), 3000);
       } else {
         const errorData = await response.json().catch(() => ({}));
         if (response.status === 409 && errorData?.code === 'EVENT_TIME_CONFLICT') {
-          const selectedTime = eventForm.dateTime ? new Date(eventForm.dateTime).getTime() : null;
-          const conflictingEvent = selectedTime
-            ? events.find((event) => new Date(event.dateTime).getTime() === selectedTime)
-            : null;
-          setTimeConflictEvent(conflictingEvent || { title: 'Another event' });
+          setTimeConflictEvent(liveConflicts[0] || errorData?.conflictingDates?.[0] || { title: 'Another event' });
         } else {
           setError(errorData.error || 'Failed to create event');
         }
@@ -573,10 +613,39 @@ export default function AdminPage() {
                 Organization Admins
               </CardTitle>
               <CardDescription>
-                View who is admin in each organization and remove admin access when needed.
+                View who is admin in each organization, add new admins directly, and remove admin access when needed.
               </CardDescription>
             </CardHeader>
             <CardContent>
+              <form onSubmit={handleAssignOrganizationAdmin} className="grid gap-3 rounded-lg border p-4 mb-4 md:grid-cols-[1.3fr_1fr_auto]">
+                <Input
+                  type="email"
+                  placeholder="student@iitk.ac.in"
+                  value={newOrgAdminForm.email}
+                  onChange={(e) => setNewOrgAdminForm((prev) => ({ ...prev, email: e.target.value }))}
+                  disabled={assigningOrgAdmin}
+                />
+                <select
+                  value={newOrgAdminForm.organizationId}
+                  onChange={(e) => setNewOrgAdminForm((prev) => ({ ...prev, organizationId: e.target.value }))}
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  disabled={assigningOrgAdmin}
+                >
+                  <option value="">Select organization</option>
+                  {organizationAdmins.map((org) => (
+                    <option key={org.organizationId} value={org.organizationId}>
+                      {org.organizationName}
+                    </option>
+                  ))}
+                </select>
+                <Button
+                  type="submit"
+                  disabled={assigningOrgAdmin || !newOrgAdminForm.email.trim() || !newOrgAdminForm.organizationId}
+                >
+                  {assigningOrgAdmin ? 'Assigning...' : 'Add Org Admin'}
+                </Button>
+              </form>
+
               {loadingOrgAdmins ? (
                 <p className="text-muted-foreground text-sm">Loading organization admins...</p>
               ) : organizationAdmins.length === 0 ? (
@@ -797,6 +866,22 @@ export default function AdminPage() {
                     />
                   </div>
 
+                  <div>
+                    <Label htmlFor="endDateTime">End Time</Label>
+                    <Input
+                      id="endDateTime"
+                      type="datetime-local"
+                      value={eventForm.endDateTime}
+                      onChange={(e) => {
+                        setEventForm({ ...eventForm, endDateTime: e.target.value });
+                        setTimeConflictEvent(null);
+                      }}
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Optional. If left empty, a 1 hour duration is used for clash checking.
+                    </p>
+                  </div>
+
                   <div className="rounded-md border p-3 space-y-3">
                     <div className="flex items-center justify-between">
                       <Label htmlFor="isRecurring">Recurring Event</Label>
@@ -846,12 +931,33 @@ export default function AdminPage() {
                     )}
                   </div>
 
+                  {liveConflicts.length > 0 && (
+                    <Alert className="border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30">
+                      <AlertDescription>
+                        <div className="space-y-2">
+                          <p className="font-medium">Possible clashes for this time slot</p>
+                          <div className="space-y-2">
+                            {liveConflicts.slice(0, 3).map((conflict) => (
+                              <div key={conflict._id} className="rounded-md border border-amber-200/60 bg-background/70 p-2 text-sm dark:border-amber-900">
+                                <p className="font-medium">{conflict.title}</p>
+                                <p className="text-xs text-muted-foreground">
+                                  {new Date(conflict.dateTime).toLocaleString()}
+                                  {conflict.endDateTime ? ` to ${new Date(conflict.endDateTime).toLocaleString()}` : ''}
+                                </p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </AlertDescription>
+                    </Alert>
+                  )}
+
                   {timeConflictEvent && (
                     <Alert className="border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30">
                       <AlertDescription>
                         <div className="space-y-3">
                           <p>
-                            An event already exists at this same date and time
+                            An event already overlaps with this time slot
                             {timeConflictEvent?.title ? ` ("${timeConflictEvent.title}")` : ''}.
                           </p>
                           <div className="flex flex-wrap gap-2">

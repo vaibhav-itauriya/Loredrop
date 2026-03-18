@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { motion } from "motion/react";
 import { useAuth } from '@/hooks/use-auth';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button.tsx';
@@ -172,6 +173,7 @@ export default function ProfilePage() {
         userData.branch = updated.user.branch;
         userData.avatar = updated.user.avatar;
         localStorage.setItem('user', JSON.stringify(userData));
+        window.dispatchEvent(new Event('auth-state-changed'));
       }
       
       toast.success('Profile updated successfully!');
@@ -204,14 +206,23 @@ export default function ProfilePage() {
 
   return (
     <div className="min-h-screen bg-background pt-20 px-4 pb-12">
-      <div className="max-w-6xl mx-auto">
-        {/* Header */}
-        <div className="mb-8">
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.35, ease: "easeOut" }}
+        className="max-w-6xl mx-auto"
+      >
+        <motion.div
+          initial={{ opacity: 0, x: -16 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.35, delay: 0.08, ease: "easeOut" }}
+          className="mb-8"
+        >
           <Link to="/feed" className="inline-flex items-center gap-2 text-primary hover:text-primary/80 mb-4">
             <ArrowLeft className="w-4 h-4" />
             Back to Feed
           </Link>
-        </div>
+        </motion.div>
 
         {loading && !user ? (
           <div className="space-y-6">
@@ -226,6 +237,11 @@ export default function ProfilePage() {
         ) : (
           <>
             {/* Profile Header Card */}
+            <motion.div
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.35, delay: 0.12, ease: "easeOut" }}
+            >
             <Card className="mb-6">
               <CardHeader>
                 <div className="flex flex-col sm:flex-row items-start sm:items-center gap-6">
@@ -415,9 +431,14 @@ export default function ProfilePage() {
                 </div>
               </CardHeader>
             </Card>
+            </motion.div>
 
-            {/* Stats Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <motion.div
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.35, delay: 0.16, ease: "easeOut" }}
+              className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6"
+            >
               <Card>
                 <CardContent className="pt-6">
                   <div className="flex items-center justify-between">
@@ -451,9 +472,13 @@ export default function ProfilePage() {
                   </div>
                 </CardContent>
               </Card>
-            </div>
+            </motion.div>
 
-            {/* Saved Events Section */}
+            <motion.div
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.35, delay: 0.2, ease: "easeOut" }}
+            >
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -543,9 +568,10 @@ export default function ProfilePage() {
                 )}
               </CardContent>
             </Card>
+            </motion.div>
           </>
         )}
-      </div>
+      </motion.div>
     </div>
   );
 }

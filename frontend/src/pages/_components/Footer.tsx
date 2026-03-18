@@ -1,4 +1,5 @@
-import { Zap, Github, Twitter, Instagram } from "lucide-react";
+import { Github, Twitter, Instagram } from "lucide-react";
+import platformLogo from "@/Gemini_Generated_Image_wwu3p2wwu3p2wwu3-removebg-preview.png";
 
 export default function Footer() {
   const currentYear = new Date().getFullYear();
@@ -10,9 +11,11 @@ export default function Footer() {
           {/* Brand */}
           <div className="md:col-span-2">
             <div className="flex items-center gap-2 mb-4">
-              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center">
-                <Zap className="w-5 h-5 text-white" />
-              </div>
+              <img
+                src={platformLogo}
+                alt="Loredrop logo"
+                className="h-9 w-9 object-contain"
+              />
               <span className="text-xl font-bold tracking-tight" style={{ fontFamily: "var(--font-display)" }}>
                 Loredrop
               </span>

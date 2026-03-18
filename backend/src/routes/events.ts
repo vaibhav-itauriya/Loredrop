@@ -30,6 +30,48 @@ async function notifyEligibleUsersOnPublish(event: any) {
 
 const router: Router = Router();
 
+function parseAudienceQuery(value: unknown) {
+  if (!value || typeof value !== 'string') return [];
+  return value
+    .split(',')
+    .map((item) => item.trim().toLowerCase())
+    .filter((item) => ['ug', 'pg', 'phd', 'faculty', 'staff', 'all'].includes(item));
+}
+
+function buildRangeFromPreset(range?: string) {
+  if (!range || range === 'all') return null;
+
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(start);
+
+  if (range === 'today') {
+    end.setHours(23, 59, 59, 999);
+    return { start, end };
+  }
+
+  if (range === 'tomorrow') {
+    start.setDate(start.getDate() + 1);
+    end.setDate(end.getDate() + 1);
+    end.setHours(23, 59, 59, 999);
+    return { start, end };
+  }
+
+  if (range === 'week') {
+    end.setDate(end.getDate() + 7);
+    end.setHours(23, 59, 59, 999);
+    return { start, end };
+  }
+
+  if (range === 'month') {
+    end.setMonth(end.getMonth() + 1);
+    end.setHours(23, 59, 59, 999);
+    return { start, end };
+  }
+
+  return null;
+}
+
 function buildRecurringDates(
   baseDate: Date,
   recurrence?: { frequency?: 'weekly' | 'monthly'; interval?: number; count?: number; until?: string },
@@ -85,11 +127,36 @@ router.get('/feed', optionalAuthMiddleware, async (req: Request, res: Response) 
     const limit = parseInt(req.query.limit as string) || 10;
     const skip = (page - 1) * limit;
     const organizationId = req.query.organizationId as string;
+    const organizationIds = typeof req.query.organizationIds === 'string'
+      ? req.query.organizationIds.split(',').map((id) => id.trim()).filter(Boolean)
+      : [];
+    const mode = typeof req.query.mode === 'string'
+      ? req.query.mode.split(',').map((item) => item.trim()).filter(Boolean)
+      : [];
+    const audience = parseAudienceQuery(req.query.audience);
+    const dateRange = typeof req.query.dateRange === 'string' ? req.query.dateRange : undefined;
 
     let query: any = { isPublished: true };
 
-    if (organizationId) {
+    if (organizationIds.length > 0) {
+      query.organizationId = {
+        $in: organizationIds.map((id) => new mongoose.Types.ObjectId(id)),
+      };
+    } else if (organizationId) {
       query.organizationId = new mongoose.Types.ObjectId(organizationId);
+    }
+
+    if (mode.length > 0) {
+      query.mode = { $in: mode };
+    }
+
+    if (audience.length > 0) {
+      query.audience = { $in: audience };
+    }
+
+    const range = buildRangeFromPreset(dateRange);
+    if (range) {
+      query.dateTime = { $gte: range.start, $lte: range.end };
     }
 
     const events = await Event.find(query)
@@ -276,15 +343,37 @@ router.post('/', authMiddleware, async (req: Request, res: Response) => {
     }
 
     const requestedDateTime = new Date(dateTime);
+    const requestedEndDateTime = endDateTime
+      ? new Date(endDateTime)
+      : new Date(requestedDateTime.getTime() + 60 * 60 * 1000);
     const recurringDates = buildRecurringDates(requestedDateTime, recurrence);
+    const eventDurationMs = Math.max(30 * 60 * 1000, requestedEndDateTime.getTime() - requestedDateTime.getTime());
     const conflicts = await Promise.all(
       recurringDates.map(async (candidateDate) => {
-        const found = await Event.exists({
+        const candidateEnd = new Date(candidateDate.getTime() + eventDurationMs);
+        const fallbackStartBoundary = new Date(candidateDate.getTime() - 60 * 60 * 1000);
+        const found = await Event.findOne({
           organizationId: new mongoose.Types.ObjectId(organizationId),
-          dateTime: candidateDate,
           isPublished: true,
-        });
-        return found ? candidateDate.toISOString() : null;
+          $or: [
+            {
+              dateTime: { $lt: candidateEnd },
+              endDateTime: { $gt: candidateDate },
+            },
+            {
+              dateTime: { $gte: fallbackStartBoundary, $lt: candidateEnd },
+              endDateTime: { $exists: false },
+            },
+          ],
+        }).select('_id title dateTime endDateTime');
+        return found
+          ? {
+              eventId: found._id,
+              title: found.title,
+              dateTime: candidateDate.toISOString(),
+              conflictingWith: found.dateTime,
+            }
+          : null;
       })
     );
     const conflictingDates = conflicts.filter(Boolean);
@@ -337,7 +426,9 @@ router.post('/', authMiddleware, async (req: Request, res: Response) => {
         organizationId: new mongoose.Types.ObjectId(organizationId),
         authorId: new mongoose.Types.ObjectId(req.userId),
         dateTime: candidateDate,
-        endDateTime: endDateTime ? new Date(endDateTime) : undefined,
+        endDateTime: endDateTime
+          ? new Date(candidateDate.getTime() + eventDurationMs)
+          : undefined,
         venue: venueValue,
         mode: modeValue,
         capacity: typeof capacity === 'number' ? capacity : undefined,

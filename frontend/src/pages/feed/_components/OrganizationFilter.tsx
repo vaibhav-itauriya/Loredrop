@@ -1,6 +1,8 @@
 import { Button } from "@/components/ui/button.tsx";
+import { Badge } from "@/components/ui/badge.tsx";
 import { cn } from "@/lib/utils.ts";
 import { groupOrganizations } from "@/lib/org-hierarchy.ts";
+import { Compass, Flame, Layers3, Sparkles, Users2 } from "lucide-react";
 
 type Organization = any;
 
@@ -21,25 +23,40 @@ export default function OrganizationFilter({
     .sort((a, b) => a.name.localeCompare(b.name));
 
   return (
-    <div className="space-y-6 max-h-[70vh] overflow-y-auto pr-1 no-scrollbar">
-      {/* For You / All */}
-      <div>
+    <div className="max-h-[75vh] overflow-y-auto rounded-[1.75rem] border border-border/60 bg-card/70 p-4 shadow-[0_18px_60px_rgba(16,24,40,0.05)] backdrop-blur-xl no-scrollbar">
+      <div className="mb-5 rounded-2xl border border-primary/10 bg-gradient-to-br from-primary/10 via-background to-accent/10 p-4">
+        <div className="flex items-center gap-2 text-primary">
+          <Compass className="h-4 w-4" />
+          <p className="text-xs font-semibold uppercase tracking-[0.2em]">Explore</p>
+        </div>
+        <h3 className="mt-2 text-lg font-semibold" style={{ fontFamily: "var(--font-display)" }}>
+          Follow campus energy
+        </h3>
+        <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+         
+        </p>
+        <Badge variant="secondary" className="mt-3 rounded-full px-3 py-1 text-xs">
+          {organizations.length} organizations
+        </Badge>
+      </div>
+
+      <div className="space-y-6 pr-1">
         <Button
           variant={selectedId === null ? "default" : "ghost"}
           className={cn(
-            "w-full justify-start",
-            selectedId === null && "bg-primary text-primary-foreground"
+            "h-11 w-full justify-start rounded-2xl px-4",
+            selectedId === null && "bg-primary text-primary-foreground shadow-lg shadow-primary/20"
           )}
           onClick={() => onSelect(null)}
         >
+          <Sparkles className="mr-2 h-4 w-4" />
           For You
         </Button>
-      </div>
 
-      {/* Councils */}
       {councils.length > 0 && (
         <div>
-          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 px-3">
+          <h3 className="mb-3 flex items-center gap-2 px-2 text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+            <Layers3 className="h-3.5 w-3.5" />
             Councils
           </h3>
           <div className="space-y-1">
@@ -48,17 +65,17 @@ export default function OrganizationFilter({
                 key={org._id}
                 variant={selectedId === org._id ? "secondary" : "ghost"}
                 className={cn(
-                  "w-full justify-start gap-3 h-auto py-2",
-                  selectedId === org._id && "bg-secondary"
+                  "h-auto w-full justify-start gap-3 rounded-2xl border border-transparent px-3 py-3 transition-all",
+                  selectedId === org._id && "border-primary/20 bg-primary/10 text-foreground"
                 )}
                 onClick={() => onSelect(org._id)}
               >
-                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center flex-shrink-0">
+                <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary/20 to-accent/20">
                   {org.logo ? (
                     <img
                       src={org.logo}
                       alt={org.name}
-                      className="w-6 h-6 rounded"
+                      className="h-6 w-6 rounded-lg object-cover"
                     />
                   ) : (
                     <span className="text-xs font-bold text-primary">
@@ -73,10 +90,10 @@ export default function OrganizationFilter({
         </div>
       )}
 
-      {/* Festivals */}
       {festivals.length > 0 && (
         <div>
-          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 px-3">
+          <h3 className="mb-3 flex items-center gap-2 px-2 text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+            <Flame className="h-3.5 w-3.5" />
             Festivals
           </h3>
           <div className="space-y-1">
@@ -85,17 +102,17 @@ export default function OrganizationFilter({
                 key={org._id}
                 variant={selectedId === org._id ? "secondary" : "ghost"}
                 className={cn(
-                  "w-full justify-start gap-3 h-auto py-2",
-                  selectedId === org._id && "bg-secondary"
+                  "h-auto w-full justify-start gap-3 rounded-2xl border border-transparent px-3 py-3 transition-all",
+                  selectedId === org._id && "border-accent/20 bg-accent/10 text-foreground"
                 )}
                 onClick={() => onSelect(org._id)}
               >
-                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-accent/20 to-primary/20 flex items-center justify-center flex-shrink-0">
+                <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-accent/20 to-primary/20">
                   {org.logo ? (
                     <img
                       src={org.logo}
                       alt={org.name}
-                      className="w-6 h-6 rounded"
+                      className="h-6 w-6 rounded-lg object-cover"
                     />
                   ) : (
                     <span className="text-xs font-bold text-accent">
@@ -110,10 +127,10 @@ export default function OrganizationFilter({
         </div>
       )}
 
-      {/* Clubs */}
       {allClubs.length > 0 && (
         <div>
-          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 px-3">
+          <h3 className="mb-3 flex items-center gap-2 px-2 text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+            <Users2 className="h-3.5 w-3.5" />
             Clubs
           </h3>
           <div className="space-y-1">
@@ -122,17 +139,17 @@ export default function OrganizationFilter({
                 key={org._id}
                 variant={selectedId === org._id ? "secondary" : "ghost"}
                 className={cn(
-                  "w-full justify-start gap-3 h-auto py-2",
-                  selectedId === org._id && "bg-secondary"
+                  "h-auto w-full justify-start gap-3 rounded-2xl border border-transparent px-3 py-3 transition-all",
+                  selectedId === org._id && "border-border bg-muted/80 text-foreground"
                 )}
                 onClick={() => onSelect(org._id)}
               >
-                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-muted to-muted/50 flex items-center justify-center flex-shrink-0">
+                <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-muted to-muted/50">
                   {org.logo ? (
                     <img
                       src={org.logo}
                       alt={org.name}
-                      className="w-6 h-6 rounded"
+                      className="h-6 w-6 rounded-lg object-cover"
                     />
                   ) : (
                     <span className="text-xs font-bold text-foreground">
@@ -147,10 +164,9 @@ export default function OrganizationFilter({
         </div>
       )}
 
-      {/* Others */}
       {others.length > 0 && (
         <div>
-          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 px-3">
+          <h3 className="mb-3 px-2 text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
             Others
           </h3>
           <div className="space-y-1">
@@ -159,12 +175,12 @@ export default function OrganizationFilter({
                 key={org._id}
                 variant={selectedId === org._id ? "secondary" : "ghost"}
                 className={cn(
-                  "w-full justify-start gap-3 h-auto py-2",
-                  selectedId === org._id && "bg-secondary"
+                  "h-auto w-full justify-start gap-3 rounded-2xl border border-transparent px-3 py-3 transition-all",
+                  selectedId === org._id && "border-border bg-muted/80 text-foreground"
                 )}
                 onClick={() => onSelect(org._id)}
               >
-                <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center flex-shrink-0">
+                <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-muted">
                   <span className="text-xs font-bold">{org.name.charAt(0)}</span>
                 </div>
                 <span className="truncate text-sm">{org.name}</span>
@@ -173,6 +189,7 @@ export default function OrganizationFilter({
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 }

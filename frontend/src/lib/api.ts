@@ -102,9 +102,23 @@ async function fetchWithAuth(url: string, options: FetchOptions = {}) {
 
 // Events API
 export const eventsAPI = {
-  getFeed: (page = 1, limit = 10, organizationId?: string) => {
+  getFeed: (
+    page = 1,
+    limit = 10,
+    organizationId?: string,
+    filters?: {
+      organizationIds?: string[];
+      eventMode?: string[];
+      audience?: string[];
+      dateRange?: string;
+    },
+  ) => {
     const params = new URLSearchParams({ page: String(page), limit: String(limit) });
     if (organizationId) params.append('organizationId', organizationId);
+    if (filters?.organizationIds?.length) params.append('organizationIds', filters.organizationIds.join(','));
+    if (filters?.eventMode?.length) params.append('mode', filters.eventMode.join(','));
+    if (filters?.audience?.length) params.append('audience', filters.audience.join(','));
+    if (filters?.dateRange) params.append('dateRange', filters.dateRange);
     return fetchWithAuth(`${API_BASE_URL}/events/feed?${params}`);
   },
 
@@ -274,6 +288,13 @@ export const organizationsAPI = {
 
   getMainAdminAnalytics: async () => {
     return fetchWithAuth(`${API_BASE_URL}/organizations/main-admin/analytics/overview`);
+  },
+
+  assignOrganizationAdmin: async (data: { email: string; organizationId: string }) => {
+    return fetchWithAuth(`${API_BASE_URL}/organizations/main-admin/organization-admins/assign`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
   },
 };
 

@@ -1,4 +1,5 @@
 import { Link, useLocation } from "react-router-dom";
+import { motion } from "motion/react";
 import { CalendarDays, Home, User } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth.ts";
 import { cn } from "@/lib/utils.ts";
@@ -16,7 +17,10 @@ export default function MobileNav() {
   const visibleItems = isAuthenticated ? items : items.filter((i) => i.to !== "/profile");
 
   return (
-    <nav
+    <motion.nav
+      initial={{ y: 80, opacity: 0 }}
+      animate={{ y: 0, opacity: 1 }}
+      transition={{ duration: 0.35, ease: "easeOut" }}
       className="fixed bottom-0 left-0 right-0 z-50 border-t border-border/60 bg-background/95 backdrop-blur-md sm:hidden"
       aria-label="Primary"
     >
@@ -30,16 +34,23 @@ export default function MobileNav() {
               to={item.to}
               aria-current={isActive ? "page" : undefined}
               className={cn(
-                "flex flex-col items-center gap-1 rounded-lg px-3 py-2 text-xs font-medium text-muted-foreground transition-colors",
+                "relative flex flex-col items-center gap-1 rounded-xl px-3 py-2 text-xs font-medium text-muted-foreground transition-colors",
                 isActive && "text-primary"
               )}
             >
-              <Icon className="h-5 w-5" />
-              <span>{item.label}</span>
+              {isActive && (
+                <motion.span
+                  layoutId="mobile-nav-pill"
+                  className="absolute inset-0 rounded-xl bg-primary/10"
+                  transition={{ type: "spring", stiffness: 420, damping: 30 }}
+                />
+              )}
+              <Icon className="relative z-10 h-5 w-5" />
+              <span className="relative z-10">{item.label}</span>
             </Link>
           );
         })}
       </div>
-    </nav>
+    </motion.nav>
   );
 }

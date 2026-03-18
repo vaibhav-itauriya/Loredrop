@@ -126,13 +126,81 @@
   * {
     @apply border-border outline-ring/50;
   }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
   body {
     @apply bg-background text-foreground;
     padding-bottom: env(safe-area-inset-bottom);
+    overflow-x: hidden;
   }
 }
 
 @layer utilities {
+  @keyframes ambient-drift {
+    0%,
+    100% {
+      transform: translate3d(0, 0, 0) scale(1);
+    }
+    33% {
+      transform: translate3d(2.5rem, -1.5rem, 0) scale(1.04);
+    }
+    66% {
+      transform: translate3d(-1.75rem, 2rem, 0) scale(0.96);
+    }
+  }
+
+  @keyframes ambient-grid-pan {
+    0% {
+      transform: translate3d(0, 0, 0);
+    }
+    100% {
+      transform: translate3d(0, 2.5rem, 0);
+    }
+  }
+
+  @keyframes ambient-noise-shift {
+    0%,
+    100% {
+      transform: translate3d(0, 0, 0);
+    }
+    50% {
+      transform: translate3d(-1.5%, 1.5%, 0);
+    }
+  }
+
+  .ambient-orb {
+    animation: ambient-drift 20s ease-in-out infinite;
+    will-change: transform;
+    mix-blend-mode: multiply;
+  }
+
+  .ambient-grid {
+    background-image:
+      linear-gradient(to right, rgba(114, 78, 255, 0.08) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(255, 163, 77, 0.08) 1px, transparent 1px);
+    background-size: 72px 72px;
+    mask-image: radial-gradient(circle at center, black 42%, transparent 84%);
+    animation: ambient-grid-pan 26s linear infinite;
+    will-change: transform;
+  }
+
+  .ambient-noise {
+    background-image:
+      radial-gradient(circle at 20% 20%, rgba(114, 78, 255, 0.14) 0 1px, transparent 1px),
+      radial-gradient(circle at 80% 30%, rgba(255, 163, 77, 0.14) 0 1.5px, transparent 1.5px),
+      radial-gradient(circle at 45% 75%, rgba(114, 78, 255, 0.1) 0 1px, transparent 1px);
+    background-size: 220px 220px, 260px 260px, 180px 180px;
+    animation: ambient-noise-shift 18s ease-in-out infinite;
+    will-change: transform;
+  }
+
+  .dark .ambient-orb {
+    mix-blend-mode: screen;
+  }
+
   .no-scrollbar {
     -ms-overflow-style: none;
     scrollbar-width: none;
@@ -140,5 +208,17 @@
 
   .no-scrollbar::-webkit-scrollbar {
     display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  .ambient-orb,
+  .ambient-grid,
+  .ambient-noise {
+    animation: none !important;
   }
 }

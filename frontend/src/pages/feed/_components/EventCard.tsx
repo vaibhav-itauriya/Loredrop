@@ -1,9 +1,11 @@
 import { format, isPast, isToday, isTomorrow } from "date-fns";
 import { useState, useEffect, useMemo, memo } from "react";
 import { Link } from "react-router-dom";
+import { motion } from "motion/react";
 import { Card } from "@/components/ui/card.tsx";
 import { Badge } from "@/components/ui/badge.tsx";
 import { Button } from "@/components/ui/button.tsx";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar.tsx";
 import {
   ArrowUp,
   Bookmark,
@@ -16,6 +18,7 @@ import {
 import { toast } from "sonner";
 import { interactionsAPI } from "@/lib/api";
 import { useAuth } from "@/hooks/use-auth.ts";
+import { createFallbackImageDataUrl } from "@/lib/placeholders.ts";
 
 type EventCardProps = {
   event: any;
@@ -176,52 +179,73 @@ function EventCard({ event }: EventCardProps) {
   // Memoize computed values to prevent recalculation on every render
   const org = useMemo(() => event.organizationId, [event.organizationId]);
   const author = useMemo(() => event.authorId, [event.authorId]);
-  const firstImageUrl = useMemo(() => event.media?.[0]?.url, [event.media]);
+  const firstImageUrl = useMemo(
+    () =>
+      event.media?.[0]?.url ||
+      createFallbackImageDataUrl(
+        `${event._id || event.title}-${org?.name || "event"}`,
+        event.title || org?.name,
+      ),
+    [event._id, event.media, event.title, org?.name],
+  );
   
   // Memoize date calculations
   const eventDateLabel = useMemo(() => getEventDateLabel(event.dateTime), [event.dateTime]);
   const eventTimeDisplay = useMemo(() => getEventTimeDisplay(event.dateTime), [event.dateTime]);
-  const formattedDate = useMemo(() => format(new Date(event.dateTime), "MMM d, yyyy"), [event.dateTime]);
-  
   // Memoize audience labels
   const audienceDisplay = useMemo(() => {
     return event.audience?.map((a: string) => audienceLabels[a]).join(", ") || "Everyone";
   }, [event.audience]);
 
   return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.45, ease: "easeOut" }}
+    >
     <Card
       data-event-id={event._id}
-      className="overflow-hidden border-border/50 hover:border-border transition-colors"
+      className="group overflow-hidden rounded-[1.75rem] border-border/60 bg-card/80 shadow-[0_18px_60px_rgba(16,24,40,0.06)] backdrop-blur-sm transition-all duration-300 hover:-translate-y-1 hover:border-primary/20 hover:shadow-[0_24px_80px_rgba(88,74,217,0.14)]"
     >
-      {/* Header Image */}
-      {firstImageUrl && (
-        <div className="aspect-video w-full overflow-hidden bg-muted">
-          <img
-            src={firstImageUrl}
-            alt={event.title}
-            className="w-full h-full object-cover"
-            loading="lazy"
-            decoding="async"
-          />
+      <div className="relative aspect-video w-full overflow-hidden bg-muted">
+        <img
+          src={firstImageUrl}
+          alt={event.title}
+          className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-[1.04]"
+          loading="lazy"
+          decoding="async"
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-black/10 to-transparent" />
+        <div className="absolute left-4 top-4 flex flex-wrap gap-2">
+          <Badge className="rounded-full bg-background/90 px-3 text-foreground backdrop-blur-sm">
+            {eventDateLabel}
+          </Badge>
+          <Badge variant="secondary" className="rounded-full bg-primary/85 px-3 text-primary-foreground">
+            {event.mode}
+          </Badge>
         </div>
-      )}
+        <div className="absolute bottom-4 left-4 right-4 flex items-end justify-between gap-3">
+          <div>
+            <p className="text-xs font-medium uppercase tracking-[0.2em] text-white/75">Next up</p>
+            <p className="mt-1 text-lg font-semibold text-white">{eventTimeDisplay}</p>
+          </div>
+          <div className="rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs text-white backdrop-blur-sm">
+            {format(new Date(event.dateTime), "MMM d, yyyy")}
+          </div>
+        </div>
+      </div>
 
-      {/* Content */}
       <div className="p-4 sm:p-5 space-y-4">
-        {/* Organization & Date */}
         <div className="flex items-start justify-between gap-3">
             <div className="flex items-center gap-3 min-w-0">
               {org?.slug ? (
                 <Link to={`/organizations/${org.slug}`} className="flex items-center gap-3 min-w-0 group">
-                  {org?.logo && (
-                    <img
-                      src={org.logo}
-                      alt={org.name}
-                      className="w-10 h-10 rounded-lg flex-shrink-0"
-                      loading="lazy"
-                      decoding="async"
-                    />
-                  )}
+                  <Avatar className="w-10 h-10 rounded-lg flex-shrink-0">
+                    <AvatarImage src={author?.avatar || org?.logo} alt={author?.displayName || org?.name} />
+                    <AvatarFallback className="rounded-lg">
+                      {(author?.displayName || author?.name || org?.name || "L").charAt(0).toUpperCase()}
+                    </AvatarFallback>
+                  </Avatar>
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-medium text-muted-foreground truncate group-hover:text-foreground transition-colors">
                       {org?.name || "Unknown Organization"}
@@ -233,15 +257,12 @@ function EventCard({ event }: EventCardProps) {
                 </Link>
               ) : (
                 <>
-                  {org?.logo && (
-                    <img
-                      src={org.logo}
-                      alt={org.name}
-                      className="w-10 h-10 rounded-lg flex-shrink-0"
-                      loading="lazy"
-                      decoding="async"
-                    />
-                  )}
+                  <Avatar className="w-10 h-10 rounded-lg flex-shrink-0">
+                    <AvatarImage src={author?.avatar || org?.logo} alt={author?.displayName || org?.name} />
+                    <AvatarFallback className="rounded-lg">
+                      {(author?.displayName || author?.name || org?.name || "L").charAt(0).toUpperCase()}
+                    </AvatarFallback>
+                  </Avatar>
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-medium text-muted-foreground truncate">
                       {org?.name || "Unknown Organization"}
@@ -253,58 +274,52 @@ function EventCard({ event }: EventCardProps) {
                 </>
               )}
             </div>
-          <Badge variant="secondary" className="flex-shrink-0">
-            {eventDateLabel}
-          </Badge>
+          <div className="hidden sm:flex flex-col items-end text-right">
+            <span className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Audience</span>
+            <span className="mt-1 text-sm font-medium">{audienceDisplay}</span>
+          </div>
         </div>
 
-        {/* Title & Description */}
         <div className="space-y-2">
-          <h3 className="text-base sm:text-lg font-semibold leading-tight">{event.title}</h3>
-          <p className="text-sm text-muted-foreground line-clamp-2">
+          <h3 className="text-lg sm:text-xl font-semibold leading-tight" style={{ fontFamily: "var(--font-display)" }}>{event.title}</h3>
+          <p className="text-sm text-muted-foreground line-clamp-3 leading-6">
             {event.description}
           </p>
         </div>
 
-        {/* Details */}
-        <div className="space-y-2 pt-2 border-t border-border/50">
+        <div className="grid gap-3 rounded-2xl border border-border/60 bg-muted/35 p-4 sm:grid-cols-2">
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Calendar className="w-4 h-4" />
             <span>
               {format(new Date(event.dateTime), "MMM d, yyyy")} at{" "}
-              {getEventTimeDisplay(event.dateTime)}
+              {eventTimeDisplay}
             </span>
           </div>
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <MapPin className="w-4 h-4" />
             <span>{event.venue}</span>
           </div>
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <span className="capitalize px-2 py-1 bg-muted rounded text-xs font-medium">
-              {event.mode}
-            </span>
+          <div className="flex items-center gap-2 text-sm text-muted-foreground sm:col-span-2 sm:hidden">
             <span>For: {audienceDisplay}</span>
           </div>
         </div>
 
-        {/* Tags */}
         {event.tags && event.tags.length > 0 && (
           <div className="flex flex-wrap gap-2">
             {event.tags.slice(0, 3).map((tag: string) => (
-              <Badge key={tag} variant="outline" className="text-xs">
+              <Badge key={tag} variant="outline" className="rounded-full border-primary/15 bg-primary/5 px-3 text-xs text-primary">
                 {tag}
               </Badge>
             ))}
           </div>
         )}
 
-        {/* Actions */}
-        <div className="flex items-center justify-between pt-2 border-t border-border/50">
-          <div className="flex items-center gap-1">
+        <div className="flex items-center justify-between gap-3 pt-2 border-t border-border/50">
+          <div className="flex items-center gap-1 flex-wrap">
             <Button
               variant="ghost"
               size="sm"
-              className={`gap-1.5 ${hasUpvoted ? "text-accent" : "text-muted-foreground hover:text-primary"}`}
+              className={`gap-1.5 rounded-full ${hasUpvoted ? "bg-accent/10 text-accent" : "text-muted-foreground hover:text-primary"}`}
               onClick={handleUpvote}
               disabled={isLoading}
             >
@@ -314,7 +329,7 @@ function EventCard({ event }: EventCardProps) {
             <Button
               variant="ghost"
               size="sm"
-              className="gap-1.5 text-muted-foreground hover:text-primary"
+              className="gap-1.5 rounded-full text-muted-foreground hover:text-primary"
               onClick={() => setShowComments(!showComments)}
             >
               <MessageCircle className="w-4 h-4" />
@@ -323,7 +338,7 @@ function EventCard({ event }: EventCardProps) {
             <Button
               variant="ghost"
               size="sm"
-              className={`text-muted-foreground hover:text-primary ${
+              className={`rounded-full text-muted-foreground hover:text-primary ${
                 hasCalendarSave ? "text-accent" : ""
               }`}
               onClick={handleCalendarSave}
@@ -335,7 +350,7 @@ function EventCard({ event }: EventCardProps) {
             <Button
               variant="ghost"
               size="sm"
-              className="gap-1.5 text-muted-foreground hover:text-primary"
+              className="gap-1.5 rounded-full text-muted-foreground hover:text-primary"
               onClick={handleAddToGoogleCalendar}
               disabled={!isAuthenticated}
               title="Add to Google Calendar"
@@ -345,7 +360,7 @@ function EventCard({ event }: EventCardProps) {
           </div>
 
           {event.registrationLink && (
-            <Button size="sm" variant="secondary" className="gap-1.5" asChild>
+            <Button size="sm" className="gap-1.5 rounded-full px-4 shadow-lg shadow-primary/20" asChild>
               <a href={event.registrationLink} target="_blank" rel="noopener noreferrer">
                 Register
                 <ExternalLink className="w-3.5 h-3.5" />
@@ -354,10 +369,13 @@ function EventCard({ event }: EventCardProps) {
           )}
         </div>
 
-        {/* Comments Section */}
         {showComments && (
-          <div className="pt-4 border-t border-border/50 space-y-3">
-            {/* Comments List */}
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            transition={{ duration: 0.25, ease: "easeOut" }}
+            className="pt-4 border-t border-border/50 space-y-3"
+          >
             <div className="space-y-2 max-h-48 overflow-y-auto">
               {comments.length === 0 ? (
                 <p className="text-xs text-muted-foreground text-center py-2">
@@ -376,13 +394,12 @@ function EventCard({ event }: EventCardProps) {
               )}
             </div>
 
-            {/* Comment Input */}
             {isAuthenticated && (
               <div className="flex gap-2">
                 <input
                   type="text"
                   placeholder="Add a comment..."
-                  className="flex-1 text-sm px-3 py-2 rounded-lg bg-muted border border-border/50 focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  className="flex-1 text-sm px-3 py-2 rounded-xl bg-muted border border-border/50 focus:outline-none focus:ring-2 focus:ring-primary/20"
                   value={commentText}
                   onChange={(e) => setCommentText(e.target.value)}
                   onKeyPress={(e) => {
@@ -395,10 +412,11 @@ function EventCard({ event }: EventCardProps) {
                 </Button>
               </div>
             )}
-          </div>
+          </motion.div>
         )}
       </div>
     </Card>
+    </motion.div>
   );
 }
 

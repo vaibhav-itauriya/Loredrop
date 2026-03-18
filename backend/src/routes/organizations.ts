@@ -127,6 +127,93 @@ router.patch('/main-admin/organization-admins/:membershipId/remove-admin', authM
   }
 });
 
+// Main admin: assign admin access directly by user email
+router.post('/main-admin/organization-admins/assign', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    if (!req.userId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+    const allowed = await isMainAdmin(req.userId);
+    if (!allowed) {
+      return res.status(403).json({ error: 'Only main admin can assign organization admins' });
+    }
+
+    const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
+    const organizationId = typeof req.body?.organizationId === 'string' ? req.body.organizationId.trim() : '';
+
+    if (!email || !organizationId) {
+      return res.status(400).json({ error: 'Email and organization are required' });
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(organizationId)) {
+      return res.status(400).json({ error: 'Invalid organization id' });
+    }
+
+    const [user, organization] = await Promise.all([
+      User.findOne({ email }),
+      Organization.findById(organizationId).select('_id name'),
+    ]);
+
+    if (!user) {
+      return res.status(404).json({ error: 'No user found with that email' });
+    }
+
+    if (!organization) {
+      return res.status(404).json({ error: 'Organization not found' });
+    }
+
+    const existingMembership = await OrganizationMember.findOne({
+      organizationId: organization._id,
+      userId: user._id,
+    });
+
+    if (existingMembership) {
+      if (existingMembership.role === 'owner' || existingMembership.role === 'admin') {
+        return res.status(400).json({ error: 'User already has admin access for this organization' });
+      }
+      existingMembership.role = 'admin';
+      await existingMembership.save();
+
+      await logAudit({
+        actorUserId: req.userId,
+        action: 'organization_member.admin_assigned',
+        entityType: 'organization_member',
+        entityId: existingMembership._id,
+        organizationId: organization._id,
+        metadata: {
+          targetUserId: user._id,
+          assignmentMode: 'upgrade_existing_member',
+        },
+      });
+
+      return res.json({ success: true, message: 'Member upgraded to organization admin' });
+    }
+
+    const membership = await OrganizationMember.create({
+      organizationId: organization._id,
+      userId: user._id,
+      role: 'admin',
+    });
+
+    await logAudit({
+      actorUserId: req.userId,
+      action: 'organization_member.admin_assigned',
+      entityType: 'organization_member',
+      entityId: membership._id,
+      organizationId: organization._id,
+      metadata: {
+        targetUserId: user._id,
+        assignmentMode: 'created_directly',
+      },
+    });
+
+    res.json({ success: true, message: 'Organization admin created successfully' });
+  } catch (error) {
+    console.error('Failed to assign organization admin:', error);
+    res.status(500).json({ error: 'Failed to assign organization admin' });
+  }
+});
+
 // Main admin analytics summary
 router.get('/main-admin/analytics/overview', authMiddleware, async (req: Request, res: Response) => {
   try {

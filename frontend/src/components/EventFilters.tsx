@@ -15,7 +15,7 @@ import { groupOrganizations, type OrganizationLike } from "@/lib/org-hierarchy.t
 export interface FilterOptions {
   dateRange?: "today" | "tomorrow" | "week" | "month" | "all";
   eventMode?: ("online" | "offline" | "hybrid")[];
-  audience?: ("UG" | "PG" | "PhD" | "Faculty" | "Staff")[];
+  audience?: ("ug" | "pg" | "phd" | "faculty" | "staff")[];
   organizations?: string[];
 }
 
@@ -40,7 +40,13 @@ const MODE_OPTIONS = [
   { value: "hybrid", label: "Hybrid" },
 ] as const;
 
-const AUDIENCE_OPTIONS = ["UG", "PG", "PhD", "Faculty", "Staff"] as const;
+const AUDIENCE_OPTIONS = [
+  { value: "ug", label: "UG" },
+  { value: "pg", label: "PG" },
+  { value: "phd", label: "PhD" },
+  { value: "faculty", label: "Faculty" },
+  { value: "staff", label: "Staff" },
+] as const;
 
 export function EventFilters({
   onFilterChange,
@@ -76,7 +82,7 @@ export function EventFilters({
   };
 
   const handleAudienceToggle = (
-    aud: "UG" | "PG" | "PhD" | "Faculty" | "Staff"
+    aud: "ug" | "pg" | "phd" | "faculty" | "staff"
   ) => {
     const audience = filters.audience || [];
     const newAudience = audience.includes(aud)
@@ -167,9 +173,9 @@ export function EventFilters({
             )}
           </Button>
         </SheetTrigger>
-        <SheetContent side="left" className="w-full sm:w-96 overflow-y-auto">
-          <SheetHeader>
-            <div className="flex items-center justify-between">
+        <SheetContent side="left" className="w-full overflow-y-auto p-0 sm:w-96">
+          <SheetHeader className="sticky top-0 z-10 border-b border-border/60 bg-background/95 px-4 py-4 backdrop-blur-sm">
+            <div className="flex items-center justify-between pr-10">
               <SheetTitle>Filter Events</SheetTitle>
               {hasActiveFilters && (
                 <Button size="sm" variant="ghost" onClick={handleClearAll}>
@@ -248,9 +254,9 @@ export function EventFilters({
             )}
           </Button>
         </SheetTrigger>
-        <SheetContent side="left" className="w-full sm:w-96 overflow-y-auto">
-          <SheetHeader>
-            <div className="flex items-center justify-between">
+        <SheetContent side="left" className="w-full overflow-y-auto p-0 sm:w-96">
+          <SheetHeader className="sticky top-0 z-10 border-b border-border/60 bg-background/95 px-4 py-4 backdrop-blur-sm">
+            <div className="flex items-center justify-between pr-10">
               <SheetTitle>Filter Events</SheetTitle>
               {hasActiveFilters && (
                 <Button size="sm" variant="ghost" onClick={handleClearAll}>
@@ -286,11 +292,11 @@ function FilterFormContent({
   organizations: { _id: string; name: string }[];
   onDateChange: (range: string) => void;
   onModeToggle: (mode: "online" | "offline" | "hybrid") => void;
-  onAudienceToggle: (aud: "UG" | "PG" | "PhD" | "Faculty" | "Staff") => void;
+  onAudienceToggle: (aud: "ug" | "pg" | "phd" | "faculty" | "staff") => void;
   onOrgToggle: (orgId: string) => void;
 }) {
   return (
-    <div className="space-y-6 mt-6">
+    <div className="space-y-6 px-4 py-4">
       <div>
         <h3 className="font-semibold text-sm mb-3 flex items-center gap-2">
           <Calendar className="w-4 h-4 text-muted-foreground" />
@@ -339,12 +345,12 @@ function FilterFormContent({
         <div className="flex flex-wrap gap-2">
           {AUDIENCE_OPTIONS.map((aud) => (
             <Button
-              key={aud}
-              variant={filters.audience?.includes(aud) ? "default" : "outline"}
+              key={aud.value}
+              variant={filters.audience?.includes(aud.value) ? "default" : "outline"}
               size="sm"
-              onClick={() => onAudienceToggle(aud)}
+              onClick={() => onAudienceToggle(aud.value)}
             >
-              {aud}
+              {aud.label}
             </Button>
           ))}
         </div>

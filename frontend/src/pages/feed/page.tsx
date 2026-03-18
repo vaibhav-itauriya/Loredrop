@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
+import { motion } from "motion/react";
 import FeedHeader from "./_components/FeedHeader.tsx";
 import OrganizationFilter from "./_components/OrganizationFilter.tsx";
 import EventCard from "./_components/EventCard.tsx";
@@ -8,6 +9,7 @@ import PersonalCalendarCard from "./_components/PersonalCalendarCard.tsx";
 import { EventFilters, type FilterOptions } from "@/components/EventFilters.tsx";
 import { Skeleton } from "@/components/ui/skeleton.tsx";
 import { Button } from "@/components/ui/button.tsx";
+import { Badge } from "@/components/ui/badge.tsx";
 import {
   Empty,
   EmptyHeader,
@@ -31,6 +33,12 @@ export default function FeedPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [canLoadMore, setCanLoadMore] = useState(false);
+
+  const activeOrganizationIds = useMemo(() => {
+    const selected = selectedOrgId ? [selectedOrgId] : [];
+    const extra = filters.organizations || [];
+    return Array.from(new Set([...selected, ...extra]));
+  }, [filters.organizations, selectedOrgId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -56,7 +64,12 @@ export default function FeedPage() {
     const fetchEvents = async () => {
       setIsLoading(true);
       try {
-        const data = await eventsAPI.getFeed(1, 10, selectedOrgId || undefined);
+        const data = await eventsAPI.getFeed(1, 10, undefined, {
+          organizationIds: activeOrganizationIds,
+          eventMode: filters.eventMode,
+          audience: filters.audience,
+          dateRange: filters.dateRange,
+        });
         if (!cancelled) {
           const list = Array.isArray(data?.data) ? data.data : [];
           setEvents(list);
@@ -78,7 +91,7 @@ export default function FeedPage() {
     return () => {
       cancelled = true;
     };
-  }, [selectedOrgId]);
+  }, [activeOrganizationIds, filters.audience, filters.dateRange, filters.eventMode]);
 
   useEffect(() => {
     if (scrollToEventId && !isLoading) {
@@ -114,7 +127,12 @@ export default function FeedPage() {
     try {
       setIsLoading(true);
       const nextPage = page + 1;
-      const data = await eventsAPI.getFeed(nextPage, 10, selectedOrgId || undefined);
+      const data = await eventsAPI.getFeed(nextPage, 10, undefined, {
+        organizationIds: activeOrganizationIds,
+        eventMode: filters.eventMode,
+        audience: filters.audience,
+        dateRange: filters.dateRange,
+      });
       const nextBatch = Array.isArray(data?.data) ? data.data : [];
       setEvents((prev) => [...prev, ...nextBatch]);
       setPage(nextPage);
@@ -125,62 +143,7 @@ export default function FeedPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [isLoading, page, selectedOrgId]);
-
-  const filteredEvents = useMemo(() => {
-    if (!events.length) return [];
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    return events.filter((event: any) => {
-      if (!event || typeof event !== "object") return false;
-      try {
-        if (filters.dateRange && filters.dateRange !== "all") {
-          if (!event.dateTime) return false;
-          const eventDate = new Date(event.dateTime);
-          if (isNaN(eventDate.getTime())) return false;
-
-          if (filters.dateRange === "today") {
-            const todayEnd = new Date(today);
-            todayEnd.setHours(23, 59, 59, 999);
-            if (eventDate < today || eventDate > todayEnd) return false;
-          } else if (filters.dateRange === "tomorrow") {
-            const tomorrow = new Date(today);
-            tomorrow.setDate(tomorrow.getDate() + 1);
-            const tomorrowEnd = new Date(tomorrow);
-            tomorrowEnd.setHours(23, 59, 59, 999);
-            if (eventDate < tomorrow || eventDate > tomorrowEnd) return false;
-          } else if (filters.dateRange === "week") {
-            const weekEnd = new Date(today);
-            weekEnd.setDate(weekEnd.getDate() + 7);
-            weekEnd.setHours(23, 59, 59, 999);
-            if (eventDate < today || eventDate > weekEnd) return false;
-          } else if (filters.dateRange === "month") {
-            const monthEnd = new Date(today);
-            monthEnd.setMonth(monthEnd.getMonth() + 1);
-            monthEnd.setHours(23, 59, 59, 999);
-            if (eventDate < today || eventDate > monthEnd) return false;
-          }
-        }
-
-        if (filters.eventMode && filters.eventMode.length > 0) {
-          if (!filters.eventMode.includes(event.mode as any)) return false;
-        }
-
-        if (filters.audience && filters.audience.length > 0) {
-          const audienceLower = filters.audience.map((a: string) => a.toLowerCase());
-          if (!event.audience || !event.audience.some((a: string) => audienceLower.includes(a))) {
-            return false;
-          }
-        }
-
-        return true;
-      } catch (error) {
-        console.error("Error filtering event:", error, event);
-        return false;
-      }
-    });
-  }, [events, filters]);
+  }, [activeOrganizationIds, filters.audience, filters.dateRange, filters.eventMode, isLoading, page]);
 
   const selectedOrg = useMemo(
     () => organizations.find((org) => org._id === selectedOrgId),
@@ -194,37 +157,86 @@ export default function FeedPage() {
     return organizations.find((org) => org._id === parentId) || null;
   }, [organizations, selectedOrg]);
 
+  const activeFilterCount = useMemo(
+    () =>
+      [
+        filters.dateRange && filters.dateRange !== "all" ? 1 : 0,
+        filters.eventMode?.length ?? 0,
+        filters.audience?.length ?? 0,
+        filters.organizations?.length ?? 0,
+      ].reduce((sum, value) => sum + value, 0),
+    [filters],
+  );
+
   return (
     <div className="min-h-screen bg-background">
       <FeedHeader />
 
-      <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6">
-        <div className="flex flex-col lg:flex-row gap-6 lg:gap-8">
-          <aside className="hidden lg:block w-64 flex-shrink-0">
-            <div className="sticky top-24">
+      <div className="max-w-7xl mx-auto px-3 py-4 sm:px-6 sm:py-6 lg:px-8">
+        {organizations.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.45, delay: 0.08, ease: "easeOut" }}
+            className="mt-4 lg:hidden"
+          >
+            <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
+              <Button
+                variant={selectedOrgId === null ? "default" : "outline"}
+                className="rounded-full"
+                onClick={() => setSelectedOrgId(null)}
+              >
+                For You
+              </Button>
+              {organizations.slice(0, 10).map((org) => (
+                <Button
+                  key={org._id}
+                  variant={selectedOrgId === org._id ? "default" : "outline"}
+                  className="rounded-full"
+                  onClick={() => setSelectedOrgId(org._id)}
+                >
+                  {org.name}
+                </Button>
+              ))}
+            </div>
+          </motion.div>
+        )}
+
+        <div className="flex flex-col gap-6 lg:flex-row lg:gap-8">
+          <aside className="hidden w-64 flex-shrink-0 lg:block">
+            <motion.div
+              initial={{ opacity: 0, x: -16 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.45, delay: 0.1, ease: "easeOut" }}
+              className="sticky top-24"
+            >
               <OrganizationFilter
                 organizations={organizations}
                 selectedId={selectedOrgId}
                 onSelect={setSelectedOrgId}
               />
-            </div>
+            </motion.div>
           </aside>
 
-          <main className="flex-1 min-w-0">
-            <div className="mb-6">
-              <div className="mb-4">
-                <h1 className="text-2xl font-bold" style={{ fontFamily: "var(--font-display)" }}>
-                  {selectedOrg ? selectedOrg.name : "For You"}
-                </h1>
-                <p className="text-muted-foreground text-sm mt-1">
-                  {selectedOrg
-                    ? selectedOrgParent
-                      ? `Latest events from ${selectedOrg.name} under ${selectedOrgParent.name}`
-                      : "Latest events from this organization"
-                    : "Discover events from across campus"}
-                </p>
+          <main className="min-w-0 flex-1">
+            <motion.div
+              initial={{ opacity: 0, y: 14 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.45, delay: 0.14, ease: "easeOut" }}
+              className="mb-6 mt-4 lg:mt-6"
+            >
+              <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Refine results</p>
+                  <h2 className="mt-1 text-xl font-semibold">Tune the feed in real time</h2>
+                </div>
+                {activeFilterCount > 0 && (
+                  <Badge variant="secondary" className="w-fit rounded-full px-3 py-1">
+                    {activeFilterCount} active
+                  </Badge>
+                )}
               </div>
-              <div className="flex flex-wrap items-center gap-3 py-3 px-4 rounded-xl bg-muted/30 border border-border/50 overflow-x-auto sm:overflow-visible">
+              <div className="overflow-x-auto rounded-[1.5rem] border border-border/60 bg-card/70 px-4 py-4 shadow-[0_18px_60px_rgba(16,24,40,0.05)] backdrop-blur-sm sm:overflow-visible">
                 <EventFilters
                   onFilterChange={setFilters}
                   currentFilters={filters}
@@ -232,16 +244,16 @@ export default function FeedPage() {
                   variant="inline"
                 />
               </div>
-            </div>
+            </motion.div>
 
             {isLoading && (
               <div className="space-y-6">
                 {Array.from({ length: 3 }).map((_, i) => (
-                  <div key={i} className="rounded-xl border border-border/50 overflow-hidden">
+                  <div key={i} className="overflow-hidden rounded-[1.75rem] border border-border/50 bg-card/70">
                     <Skeleton className="aspect-video w-full" />
-                    <div className="p-5 space-y-3">
+                    <div className="space-y-3 p-5">
                       <div className="flex items-center gap-2">
-                        <Skeleton className="w-8 h-8 rounded-lg" />
+                        <Skeleton className="h-8 w-8 rounded-lg" />
                         <Skeleton className="h-4 w-32" />
                       </div>
                       <Skeleton className="h-6 w-3/4" />
@@ -253,7 +265,7 @@ export default function FeedPage() {
               </div>
             )}
 
-            {!isLoading && filteredEvents.length === 0 && (
+            {!isLoading && events.length === 0 && (
               <Empty>
                 <EmptyHeader>
                   <EmptyMedia variant="icon">
@@ -269,16 +281,23 @@ export default function FeedPage() {
               </Empty>
             )}
 
-            {!isLoading && filteredEvents.length > 0 && (
+            {!isLoading && events.length > 0 && (
               <div className="space-y-6">
-                {filteredEvents.map((event: any) => (
-                  <EventCard key={event._id} event={event} />
+                {events.map((event: any, index: number) => (
+                  <motion.div
+                    key={event._id}
+                    initial={{ opacity: 0, y: 18 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.35, delay: Math.min(index * 0.05, 0.3), ease: "easeOut" }}
+                  >
+                    <EventCard event={event} />
+                  </motion.div>
                 ))}
 
                 {canLoadMore && (
                   <div className="flex justify-center pt-4">
-                    <Button variant="secondary" onClick={handleLoadMore}>
-                      <Loader2 className="w-4 h-4 mr-2" />
+                    <Button variant="secondary" onClick={handleLoadMore} className="rounded-full px-5">
+                      <Loader2 className="mr-2 h-4 w-4" />
                       Load More Events
                     </Button>
                   </div>
@@ -286,17 +305,22 @@ export default function FeedPage() {
               </div>
             )}
 
-            <div className="xl:hidden mt-6 space-y-4">
+            <div className="mt-6 space-y-4 xl:hidden">
               <PersonalCalendarCard />
               <UpcomingEventsSidebar events={upcomingEvents} />
             </div>
           </main>
 
-          <aside className="hidden xl:block w-72 flex-shrink-0">
-            <div className="sticky top-24 space-y-4 max-h-[calc(100vh-7rem)] overflow-y-auto pr-1 no-scrollbar">
+          <aside className="hidden w-72 flex-shrink-0 xl:block">
+            <motion.div
+              initial={{ opacity: 0, x: 16 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.45, delay: 0.18, ease: "easeOut" }}
+              className="sticky top-24 space-y-4 max-h-[calc(100vh-7rem)] overflow-y-auto pr-1 no-scrollbar"
+            >
               <PersonalCalendarCard />
               <UpcomingEventsSidebar events={upcomingEvents} />
-            </div>
+            </motion.div>
           </aside>
         </div>
       </div>

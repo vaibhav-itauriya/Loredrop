@@ -4,6 +4,8 @@ export type OrganizationLike = {
   _id: string;
   name: string;
   type?: string;
+  logo?: string;
+  slug?: string;
   parentOrganizationId?: ParentRef;
 };
 

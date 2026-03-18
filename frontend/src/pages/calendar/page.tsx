@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { motion } from "motion/react";
 import FeedHeader from "../feed/_components/FeedHeader.tsx";
 import EventCard from "../feed/_components/EventCard.tsx";
 import { Button } from "@/components/ui/button.tsx";
@@ -45,9 +46,18 @@ export default function CalendarPage() {
     <div className="min-h-screen bg-background">
       <FeedHeader />
 
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        {/* Header */}
-        <div className="flex items-center gap-4 mb-8">
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.35, ease: "easeOut" }}
+        className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6"
+      >
+        <motion.div
+          initial={{ opacity: 0, x: -16 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.35, delay: 0.08, ease: "easeOut" }}
+          className="flex items-center gap-4 mb-8"
+        >
           <Link to="/feed">
             <Button variant="ghost" size="icon">
               <ArrowLeft className="w-5 h-5" />
@@ -65,7 +75,7 @@ export default function CalendarPage() {
               Events you've saved for later
             </p>
           </div>
-        </div>
+        </motion.div>
 
         {/* Loading State */}
         {isLoading && (
@@ -107,13 +117,18 @@ export default function CalendarPage() {
 
         {/* Saved Events */}
         {!isLoading && sortedEvents.length > 0 && (
-          <div className="space-y-6">
+          <motion.div
+            initial={{ opacity: 0, y: 18 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.35, delay: 0.12, ease: "easeOut" }}
+            className="space-y-6"
+          >
             {sortedEvents.map(({ eventId, _id }) => (
               <EventCard key={_id} event={eventId} />
             ))}
-          </div>
+          </motion.div>
         )}
-      </div>
+      </motion.div>
     </div>
   );
 }

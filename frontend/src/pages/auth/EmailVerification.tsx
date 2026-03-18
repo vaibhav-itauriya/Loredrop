@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,6 +10,8 @@ import { toast } from 'sonner';
 
 export default function EmailVerificationPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const isResetMode = searchParams.get('mode') === 'reset';
 
   const [step, setStep] = useState<'email' | 'verify' | 'password'>('email');
   const [iitEmail, setIitEmail] = useState('');
@@ -20,9 +22,7 @@ export default function EmailVerificationPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [resendCooldown, setResendCooldown] = useState(0);
-  const [firebaseUid, setFirebaseUid] = useState<string | null>(null);
 
-  // Handle resend cooldown
   useEffect(() => {
     if (resendCooldown > 0) {
       const timer = setTimeout(() => setResendCooldown(resendCooldown - 1), 1000);
@@ -31,16 +31,13 @@ export default function EmailVerificationPage() {
   }, [resendCooldown]);
 
   const normalizeEmail = (email: string) => email.trim().toLowerCase();
-  const validateIITEmail = (email: string) => {
-    return normalizeEmail(email).endsWith('@iitk.ac.in');
-  };
+  const validateIITEmail = (email: string) => normalizeEmail(email).endsWith('@iitk.ac.in');
 
   const handleEmailSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
     const emailToUse = normalizeEmail(iitEmail);
-
     if (!emailToUse) {
       setError('Please enter your IITK email');
       return;
@@ -53,7 +50,6 @@ export default function EmailVerificationPage() {
 
     setIsLoading(true);
     try {
-      // Send verification code
       const response = await fetch(`${import.meta.env.VITE_API_URL}/auth/send-verification-code`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -61,17 +57,16 @@ export default function EmailVerificationPage() {
       });
 
       if (!response.ok) {
-        const error = await response.json();
-        setError(error.error || 'Failed to send verification code');
+        const payload = await response.json();
+        setError(payload.error || 'Failed to send verification code');
         return;
       }
 
-      const data = await response.json();
+      await response.json();
       setIitEmail(emailToUse);
-      setFirebaseUid(data.firebaseUid || null); // Store UID if returned
-      setSuccess('✓ Verification code sent to your email!');
+      setSuccess('Verification code sent to your email.');
       toast.success('Check your email for the verification code');
-      
+
       setTimeout(() => {
         setStep('verify');
         setSuccess(null);
@@ -94,7 +89,6 @@ export default function EmailVerificationPage() {
         return;
       }
 
-      // Verify the code with backend
       const response = await fetch(`${import.meta.env.VITE_API_URL}/auth/verify-code`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -105,36 +99,29 @@ export default function EmailVerificationPage() {
       });
 
       if (!response.ok) {
-        const error = await response.json();
-        setError(error.error || 'Failed to verify code');
+        const payload = await response.json();
+        setError(payload.error || 'Failed to verify code');
         return;
       }
 
       const data = await response.json();
-      
-      // Check if user needs to set password
-      if (data.needsPassword) {
-        setSuccess('✓ Email verified! Please set your password.');
-        toast.success('Email verified! Now set your password.');
+      if (data.needsPassword || isResetMode) {
+        setSuccess(isResetMode ? 'Identity verified. Set your new password.' : 'Email verified. Please set your password.');
+        toast.success(isResetMode ? 'Email verified. Set your new password.' : 'Email verified! Now set your password.');
         setTimeout(() => {
           setStep('password');
           setSuccess(null);
         }, 1000);
         return;
       }
-      
-      // Store auth token and user data
-      if (data.token) {
-        localStorage.setItem('authToken', data.token);
-      }
-      if (data.user) {
-        localStorage.setItem('user', JSON.stringify(data.user));
-      }
-      
-      setSuccess('✓ Email verified successfully!');
+
+      if (data.token) localStorage.setItem('authToken', data.token);
+      if (data.user) localStorage.setItem('user', JSON.stringify(data.user));
+      window.dispatchEvent(new Event('auth-state-changed'));
+
+      setSuccess('Email verified successfully.');
       toast.success('Sign-in successful!');
-      
-      // Reload the page to load user data from localStorage
+
       setTimeout(() => {
         window.location.href = '/feed';
       }, 1500);
@@ -159,8 +146,8 @@ export default function EmailVerificationPage() {
       });
 
       if (!response.ok) {
-        const error = await response.json();
-        setError(error.error || 'Failed to send code');
+        const payload = await response.json();
+        setError(payload.error || 'Failed to send code');
         return;
       }
 
@@ -198,30 +185,24 @@ export default function EmailVerificationPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           email: normalizeEmail(iitEmail),
-          password: password,
+          password,
         }),
       });
 
       if (!response.ok) {
-        const error = await response.json();
-        setError(error.error || 'Failed to set password');
+        const payload = await response.json();
+        setError(payload.error || 'Failed to set password');
         return;
       }
 
       const data = await response.json();
-      
-      // Store auth token and user data
-      if (data.token) {
-        localStorage.setItem('authToken', data.token);
-      }
-      if (data.user) {
-        localStorage.setItem('user', JSON.stringify(data.user));
-      }
-      
-      setSuccess('✓ Password set successfully!');
-      toast.success('Account created successfully!');
-      
-      // Redirect to feed
+      if (data.token) localStorage.setItem('authToken', data.token);
+      if (data.user) localStorage.setItem('user', JSON.stringify(data.user));
+      window.dispatchEvent(new Event('auth-state-changed'));
+
+      setSuccess(isResetMode ? 'Password reset successfully.' : 'Password set successfully.');
+      toast.success(isResetMode ? 'Password reset successfully!' : 'Account created successfully!');
+
       setTimeout(() => {
         window.location.href = '/feed';
       }, 1500);
@@ -243,14 +224,13 @@ export default function EmailVerificationPage() {
           </div>
           <CardTitle className="text-2xl">IITK Email Verification</CardTitle>
           <CardDescription>
-            {step === 'email' && 'Enter your IITK email address'}
+            {step === 'email' && (isResetMode ? 'Verify your IITK email to reset password' : 'Enter your IITK email address')}
             {step === 'verify' && 'Enter the verification code'}
-            {step === 'password' && 'Create your password'}
+            {step === 'password' && (isResetMode ? 'Create a new password' : 'Create your password')}
           </CardDescription>
         </CardHeader>
 
         <CardContent className="space-y-6">
-          {/* Step 1: Email Input */}
           {step === 'email' && (
             <form onSubmit={handleEmailSubmit} className="space-y-4">
               <div className="space-y-2">
@@ -293,7 +273,7 @@ export default function EmailVerificationPage() {
                     Validating...
                   </>
                 ) : (
-                  'Continue with Email'
+                  isResetMode ? 'Send Reset Code' : 'Continue with Email'
                 )}
               </Button>
 
@@ -312,12 +292,11 @@ export default function EmailVerificationPage() {
                 onClick={() => navigate('/auth/login')}
                 className="w-full"
               >
-                Already have an account? Login
+                {isResetMode ? 'Back to Login' : 'Already have an account? Login'}
               </Button>
             </form>
           )}
 
-          {/* Step 2: Code Verification */}
           {step === 'verify' && (
             <form onSubmit={handleVerifyCode} className="space-y-4">
               <Alert className="bg-blue-50 border-blue-200">
@@ -398,7 +377,6 @@ export default function EmailVerificationPage() {
             </form>
           )}
 
-          {/* Step 3: Password Setup */}
           {step === 'password' && (
             <form onSubmit={handleSetPassword} className="space-y-4">
               <Alert className="bg-blue-50 border-blue-200">
@@ -464,7 +442,7 @@ export default function EmailVerificationPage() {
                     Setting Password...
                   </>
                 ) : (
-                  'Set Password'
+                  isResetMode ? 'Reset Password' : 'Set Password'
                 )}
               </Button>
             </form>
@@ -472,7 +450,6 @@ export default function EmailVerificationPage() {
         </CardContent>
       </Card>
 
-      {/* Info Footer */}
       <div className="fixed bottom-4 left-4 right-4 text-center text-xs text-muted-foreground max-w-md mx-auto">
         <p>This ensures only IITK community members can access the platform</p>
       </div>

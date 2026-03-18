@@ -1,7 +1,7 @@
 import { motion } from "motion/react";
 import { Button } from "@/components/ui/button.tsx";
 import { SignInButton } from "@/components/ui/signin.tsx";
-import { Zap } from "lucide-react";
+import platformLogo from "@/Gemini_Generated_Image_wwu3p2wwu3p2wwu3-removebg-preview.png";
 
 export default function Header() {
   return (
@@ -14,9 +14,11 @@ export default function Header() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           <div className="flex items-center gap-2">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center">
-              <Zap className="w-5 h-5 text-white" />
-            </div>
+            <img
+              src={platformLogo}
+              alt="Loredrop logo"
+              className="h-9 w-9 object-contain"
+            />
             <span className="text-xl font-bold tracking-tight" style={{ fontFamily: "var(--font-display)" }}>
               Loredrop
             </span>

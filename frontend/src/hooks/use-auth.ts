@@ -6,41 +6,53 @@ export function useAuth() {
   const [error, setError] = useState<Error | null>(null);
   const [isConfigured] = useState(true);
 
-  // Load user from localStorage on mount
   useEffect(() => {
-    try {
-      const storedUser = localStorage.getItem('user');
-      const storedToken = localStorage.getItem('authToken');
-      
-      if (storedUser && storedToken) {
-        const userData = JSON.parse(storedUser);
-        setUser(userData);
-        console.log('✓ User loaded from storage:', userData.email);
+    const syncUserFromStorage = () => {
+      try {
+        const storedUser = localStorage.getItem("user");
+        const storedToken = localStorage.getItem("authToken");
+
+        if (storedUser && storedToken) {
+          setUser(JSON.parse(storedUser));
+          return;
+        }
+
+        setUser(null);
+      } catch (err) {
+        console.error("Error loading user from storage:", err);
       }
-    } catch (err) {
-      console.error('Error loading user from storage:', err);
+    };
+
+    try {
+      syncUserFromStorage();
     } finally {
       setIsLoading(false);
     }
+
+    window.addEventListener("storage", syncUserFromStorage);
+    window.addEventListener("auth-state-changed", syncUserFromStorage as EventListener);
+    return () => {
+      window.removeEventListener("storage", syncUserFromStorage);
+      window.removeEventListener("auth-state-changed", syncUserFromStorage as EventListener);
+    };
   }, []);
 
   const signinRedirect = async () => {
-    // Redirect to login page (users can choose to login or verify email)
-    window.location.href = '/auth/login';
+    window.location.href = "/auth/login";
   };
 
   const removeUser = async () => {
     setIsLoading(true);
     setError(null);
     try {
-      localStorage.removeItem('authToken');
-      localStorage.removeItem('user');
+      localStorage.removeItem("authToken");
+      localStorage.removeItem("user");
+      window.dispatchEvent(new Event("auth-state-changed"));
       setUser(null);
-      console.log('✓ User logged out');
     } catch (err) {
-      const error = err as Error;
-      setError(error);
-      console.error("Sign out error:", error);
+      const nextError = err as Error;
+      setError(nextError);
+      console.error("Sign out error:", nextError);
     } finally {
       setIsLoading(false);
     }
@@ -57,6 +69,3 @@ export function useAuth() {
     isConfigured,
   };
 }
-
-
-

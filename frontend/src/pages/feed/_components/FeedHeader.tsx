@@ -1,13 +1,15 @@
 import { Link, useNavigate } from "react-router-dom";
+import { motion } from "motion/react";
 import { Button } from "@/components/ui/button.tsx";
 import { SignInButton } from "@/components/ui/signin.tsx";
 import { useAuth } from "@/hooks/use-auth.ts";
-import { Zap, Menu, Moon, Sun, UserPlus, LogOut } from "lucide-react";
+import { Menu, Moon, Sun, UserPlus, LogOut } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useTheme } from "next-themes";
 import NotificationBell from "@/components/NotificationBell.tsx";
 import { organizationsAPI, authAPI } from "@/lib/api";
 import { buildOrganizationOptions } from "@/lib/org-hierarchy.ts";
+import platformLogo from "@/Gemini_Generated_Image_wwu3p2wwu3p2wwu3-removebg-preview.png";
 import {
   Sheet,
   SheetContent,
@@ -19,6 +21,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu.tsx";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar.tsx";
 
 export default function FeedHeader() {
   const { user, isAuthenticated, removeUser } = useAuth();
@@ -71,14 +74,22 @@ export default function FeedHeader() {
 
 
   return (
-    <header className="sticky top-0 z-50 backdrop-blur-xl bg-background/80 border-b border-border/50">
+    <motion.header
+      initial={{ y: -18, opacity: 0 }}
+      animate={{ y: 0, opacity: 1 }}
+      transition={{ duration: 0.3, ease: "easeOut" }}
+      className="sticky top-0 z-50 backdrop-blur-xl bg-background/80 border-b border-border/50"
+    >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
-          {/* Logo */}
           <Link to="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center">
-              <Zap className="w-5 h-5 text-white" />
-            </div>
+            <motion.img
+              src={platformLogo}
+              alt="Loredrop logo"
+              className="h-9 w-9 object-contain"
+              animate={{ y: [0, -2, 0], rotate: [0, -2, 0, 2, 0] }}
+              transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
+            />
             <span
               className="text-xl font-bold tracking-tight hidden sm:block"
               style={{ fontFamily: "var(--font-display)" }}
@@ -87,9 +98,12 @@ export default function FeedHeader() {
             </span>
           </Link>
 
-          {/* Actions */}
-          <div className="flex items-center gap-2">
-            {/* Theme Toggle */}
+          <motion.div
+            initial={{ opacity: 0, x: 12 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.3, delay: 0.08, ease: "easeOut" }}
+            className="flex items-center gap-2"
+          >
             <Button
               variant="ghost"
               size="icon"
@@ -103,7 +117,6 @@ export default function FeedHeader() {
               )}
             </Button>
 
-            {/* Notifications */}
             {isAuthenticated && <NotificationBell />}
 
             {isAuthenticated ? (
@@ -111,9 +124,12 @@ export default function FeedHeader() {
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button variant="ghost" size="icon">
-                      <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-accent flex items-center justify-center text-white font-medium text-sm">
-                        {user?.displayName?.charAt(0) || "U"}
-                      </div>
+                      <Avatar className="w-8 h-8">
+                        <AvatarImage src={user?.avatar} alt={user?.displayName || user?.email} />
+                        <AvatarFallback className="bg-gradient-to-br from-primary to-accent text-white font-medium text-sm">
+                          {user?.displayName?.charAt(0) || user?.email?.charAt(0) || "U"}
+                        </AvatarFallback>
+                      </Avatar>
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-48">
@@ -147,7 +163,6 @@ export default function FeedHeader() {
               </SignInButton>
             )}
 
-            {/* Mobile Menu */}
             <Sheet>
               <SheetTrigger asChild>
                 <Button variant="ghost" size="icon" className="sm:hidden">
@@ -158,9 +173,12 @@ export default function FeedHeader() {
                 <div className="flex flex-col gap-4 mt-8">
                   {isAuthenticated && (
                     <div className="flex items-center gap-3 pb-4 border-b border-border">
-                      <div className="w-12 h-12 rounded-full bg-gradient-to-br from-primary to-accent flex items-center justify-center text-white font-medium">
-                        {user?.displayName?.charAt(0) || "U"}
-                      </div>
+                      <Avatar className="w-12 h-12">
+                        <AvatarImage src={user?.avatar} alt={user?.displayName || user?.email} />
+                        <AvatarFallback className="bg-gradient-to-br from-primary to-accent text-white font-medium">
+                          {user?.displayName?.charAt(0) || user?.email?.charAt(0) || "U"}
+                        </AvatarFallback>
+                      </Avatar>
                       <div>
                         <p className="font-medium">{user?.displayName}</p>
                         <p className="text-sm text-muted-foreground">
@@ -216,7 +234,7 @@ export default function FeedHeader() {
                 </div>
               </SheetContent>
             </Sheet>
-          </div>
+          </motion.div>
         </div>
 
       </div>
@@ -240,7 +258,7 @@ export default function FeedHeader() {
           </div>
         </div>
       )}
-    </header>
+    </motion.header>
   );
 }
 

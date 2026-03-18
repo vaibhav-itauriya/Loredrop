@@ -60,6 +60,7 @@ export default function LoginPage() {
       if (data.user) {
         localStorage.setItem('user', JSON.stringify(data.user));
       }
+      window.dispatchEvent(new Event('auth-state-changed'));
       
       toast.success('Login successful!');
       
@@ -121,6 +122,15 @@ export default function LoginPage() {
                 disabled={isLoading}
                 className="text-base"
               />
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => navigate('/auth/verify-email?mode=reset')}
+                  className="text-xs text-primary hover:underline"
+                >
+                  Forgot password?
+                </button>
+              </div>
             </div>
 
             {error && (
