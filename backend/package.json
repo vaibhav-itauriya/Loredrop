@@ -1,5 +1,5 @@
 {
-  "name": "loredrop-backend",
+  "name": "backend",
   "version": "1.0.0",
   "description": "Backend API for LoredROP event platform",
   "main": "dist/server.js",

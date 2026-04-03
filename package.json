@@ -8,7 +8,7 @@
   ],
   "scripts": {
     "install-all": "pnpm -w install",
-    "dev": "pnpm -w --parallel --filter frontend dev --filter backend dev",
+    "dev": "pnpm --parallel --filter frontend --filter backend dev",
     "start:frontend": "pnpm --filter frontend --workspace-root run dev",
     "start:backend": "pnpm --filter backend --workspace-root run dev",
     "build": "pnpm -w -r run build"
