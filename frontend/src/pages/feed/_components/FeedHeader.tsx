@@ -1,9 +1,10 @@
 import { Link, useNavigate } from "react-router-dom";
 import { motion } from "motion/react";
 import { Button } from "@/components/ui/button.tsx";
+import { Badge } from "@/components/ui/badge.tsx";
 import { SignInButton } from "@/components/ui/signin.tsx";
 import { useAuth } from "@/hooks/use-auth.ts";
-import { Menu, Moon, Sun, UserPlus, LogOut } from "lucide-react";
+import { Menu, Moon, Sun, UserPlus, LogOut, Sparkles, Check } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useTheme } from "next-themes";
 import NotificationBell from "@/components/NotificationBell.tsx";
@@ -19,16 +20,38 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu.tsx";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar.tsx";
 
-export default function FeedHeader() {
+type FeedHeaderProps = {
+  isForYouActive?: boolean;
+  isSubscribedActive?: boolean;
+  activeMode?: "forYou" | "subscribed" | "trending" | "upcoming";
+  activeFilterCount?: number;
+  onSelectForYou?: () => void;
+  onSelectSubscribed?: () => void;
+  onSelectTrending?: () => void;
+  onSelectUpcoming?: () => void;
+};
+
+export default function FeedHeader({
+  isForYouActive = true,
+  isSubscribedActive = false,
+  activeMode = "forYou",
+  activeFilterCount = 0,
+  onSelectForYou,
+  onSelectSubscribed,
+  onSelectTrending,
+  onSelectUpcoming,
+}: FeedHeaderProps) {
   const { user, isAuthenticated, removeUser } = useAuth();
   const navigate = useNavigate();
   const { theme, setTheme } = useTheme();
   const [isOrgMember, setIsOrgMember] = useState(false);
   const [isMainAdmin, setIsMainAdmin] = useState(false);
+  const [manageableOrgSlug, setManageableOrgSlug] = useState<string | null>(null);
   const [showRequestModal, setShowRequestModal] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [checkingMembership, setCheckingMembership] = useState(false);
@@ -43,12 +66,18 @@ export default function FeedHeader() {
             authAPI.getProfile().catch(() => ({ isMainAdmin: false })),
             organizationsAPI.getUserMemberships(),
           ]);
+          const manageableOrg =
+            (membershipData?.organizations || []).find((org: any) =>
+              ["owner", "admin", "moderator"].includes(org?.role)
+            ) || membershipData?.organizations?.[0];
           setIsMainAdmin(!!(profileRes as any).isMainAdmin);
           setIsOrgMember(membershipData.isMember);
+          setManageableOrgSlug(manageableOrg?.slug || null);
         } catch (err) {
           console.error('Failed to check access:', err);
           setIsOrgMember(false);
           setIsMainAdmin(false);
+          setManageableOrgSlug(null);
         } finally {
           setCheckingMembership(false);
         }
@@ -57,6 +86,7 @@ export default function FeedHeader() {
     } else {
       setIsOrgMember(false);
       setIsMainAdmin(false);
+      setManageableOrgSlug(null);
     }
   }, [isAuthenticated, user]);
 
@@ -78,18 +108,12 @@ export default function FeedHeader() {
       initial={{ y: -18, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
       transition={{ duration: 0.3, ease: "easeOut" }}
-      className="sticky top-0 z-50 backdrop-blur-xl bg-background/80 border-b border-border/50"
+      className="sticky top-0 z-50 border-b border-white/40 bg-[linear-gradient(180deg,rgba(255,255,255,0.88),rgba(255,255,255,0.78))] shadow-[0_10px_30px_rgba(15,23,42,0.05)] backdrop-blur-xl"
     >
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="mx-auto w-full max-w-[1880px] px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           <Link to="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
-            <motion.img
-              src={platformLogo}
-              alt="Loredrop logo"
-              className="h-9 w-9 object-contain"
-              animate={{ y: [0, -2, 0], rotate: [0, -2, 0, 2, 0] }}
-              transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
-            />
+            <img src={platformLogo} alt="Loredrop logo" className="h-9 w-9 object-contain" />
             <span
               className="text-xl font-bold tracking-tight hidden sm:block"
               style={{ fontFamily: "var(--font-display)" }}
@@ -97,6 +121,48 @@ export default function FeedHeader() {
               Loredrop
             </span>
           </Link>
+
+          <div className="hidden lg:flex items-center gap-2 rounded-full border border-white/55 bg-[linear-gradient(145deg,rgba(255,255,255,0.9),rgba(248,250,252,0.75))] px-2.5 py-2 shadow-[0_14px_34px_rgba(15,23,42,0.08)] backdrop-blur">
+            <Button
+              variant={isForYouActive ? "default" : "ghost"}
+              size="sm"
+              className="rounded-full px-4 shadow-sm"
+              onClick={onSelectForYou}
+            >
+              <Sparkles className="mr-2 h-4 w-4" />
+              For You
+            </Button>
+            <Button
+              variant={isSubscribedActive ? "default" : "ghost"}
+              size="sm"
+              className="rounded-full px-4 shadow-sm"
+              onClick={onSelectSubscribed}
+            >
+              <Check className="mr-2 h-4 w-4" />
+              Subscribed
+            </Button>
+            <Button
+              variant={activeMode === "trending" ? "default" : "ghost"}
+              size="sm"
+              className="rounded-full px-4 shadow-sm"
+              onClick={onSelectTrending}
+            >
+              Trending
+            </Button>
+            <Button
+              variant={activeMode === "upcoming" ? "default" : "ghost"}
+              size="sm"
+              className="rounded-full px-4 shadow-sm"
+              onClick={onSelectUpcoming}
+            >
+              Upcoming
+            </Button>
+            {activeFilterCount > 0 && (
+              <Badge variant="outline" className="rounded-full border-white/70 bg-white/70 px-3 py-1 shadow-sm">
+                {activeFilterCount} filters
+              </Badge>
+            )}
+          </div>
 
           <motion.div
             initial={{ opacity: 0, x: 12 }}
@@ -136,6 +202,11 @@ export default function FeedHeader() {
                     <Link to="/profile">
                       <DropdownMenuItem>My Profile</DropdownMenuItem>
                     </Link>
+                    {manageableOrgSlug && (
+                      <Link to={`/organizations/${manageableOrgSlug}/manage`}>
+                        <DropdownMenuItem>Manage Organization</DropdownMenuItem>
+                      </Link>
+                    )}
                     {isMainAdmin && (
                       <Link to="/admin">
                         <DropdownMenuItem>Admin Dashboard</DropdownMenuItem>
@@ -146,6 +217,7 @@ export default function FeedHeader() {
                         <DropdownMenuItem>Create Event</DropdownMenuItem>
                       </Link>
                     )}
+                    <DropdownMenuSeparator />
                     <DropdownMenuItem onClick={() => setShowRequestModal(true)} className="gap-2">
                       <UserPlus className="w-4 h-4" />
                       Request Organization Access
@@ -159,7 +231,7 @@ export default function FeedHeader() {
               </>
             ) : (
               <SignInButton>
-                <Button size="sm">Sign In</Button>
+                <Button size="sm" className="shadow-[0_10px_24px_rgba(99,102,241,0.2)]">Sign In</Button>
               </SignInButton>
             )}
 
@@ -213,6 +285,14 @@ export default function FeedHeader() {
                       >
                         My Profile
                       </Link>
+                      {manageableOrgSlug && (
+                        <Link
+                          to={`/organizations/${manageableOrgSlug}/manage`}
+                          className="py-2 text-sm font-medium hover:text-primary transition-colors"
+                        >
+                          Manage Organization
+                        </Link>
+                      )}
                       {isMainAdmin && (
                         <Link
                           to="/admin"

@@ -12,11 +12,13 @@ import interactionRoutes from './routes/interactions';
 import organizationRoutes from './routes/organizations';
 import authRoutes from './routes/auth';
 import organizationRequestRoutes from './routes/organization-requests';
+import organizerRoutes from './routes/organizer';
 
 // Initialize email transporter after dotenv.config()
 initializeEmailTransport();
 
 const app = express();
+let mongoStatus: 'connecting' | 'connected' | 'error' = 'connecting';
 
 // Middleware
 app.use(cors({
@@ -33,6 +35,23 @@ app.use(cors({
   credentials: true,
 }));
 app.use(express.json({ limit: '10mb' }));
+
+// Register routes before MongoDB finishes connecting so the server can start
+// and expose health status even during database startup delays.
+app.use('/api/events', eventRoutes);
+app.use('/api/interactions', interactionRoutes);
+app.use('/api/organizations', organizationRoutes);
+app.use('/api/auth', authRoutes);
+app.use('/api/organization-requests', organizationRequestRoutes);
+app.use('/api/organizer', organizerRoutes);
+
+app.get('/health', (_req, res) => {
+  const isReady = mongoStatus === 'connected';
+  res.status(isReady ? 200 : 503).json({
+    status: isReady ? 'ok' : 'degraded',
+    database: mongoStatus,
+  });
+});
 
 // Initialize Firebase Admin SDK
 const firebaseCredentials = {
@@ -63,38 +82,27 @@ mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/loredrop'
   serverSelectionTimeoutMS: 30000,
 })
   .then(async () => {
+    mongoStatus = 'connected';
     console.log('Connected to MongoDB');
 
     // Fix duplicate firebaseUid index issue
     try {
       const { User } = await import('./models');
-      await User.collection.dropIndex('firebaseUid_1').catch(() => {});
+      await User.collection.dropIndex('firebaseUid_1').catch(() => { });
       await User.collection.createIndex({ firebaseUid: 1 }, { sparse: true, unique: true });
       console.log('✓ Fixed firebaseUid index for email-based authentication');
     } catch (indexError) {
       console.log('Index migration note:', (indexError as any).message);
     }
 
-    // Routes (register after successful DB connection)
-    app.use('/api/events', eventRoutes);
-    app.use('/api/interactions', interactionRoutes);
-    app.use('/api/organizations', organizationRoutes);
-    app.use('/api/auth', authRoutes);
-    app.use('/api/organization-requests', organizationRequestRoutes);
-
-    // Health check
-    app.get('/health', (req, res) => {
-      res.json({ status: 'ok' });
-    });
-
-    const PORT = process.env.PORT || 3001;
-
-    app.listen(PORT, () => {
-      console.log(`Backend server running on port ${PORT}`);
-    });
   })
   .catch(err => {
+    mongoStatus = 'error';
     console.error('MongoDB connection error:', err);
-    // Exit process when DB connection fails so the problem is visible
-    process.exit(1);
   });
+
+const PORT = process.env.PORT || 3001;
+
+app.listen(PORT, () => {
+  console.log(`Backend server running on port ${PORT}`);
+});

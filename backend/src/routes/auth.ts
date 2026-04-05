@@ -1,11 +1,31 @@
 import { Router, Request, Response } from 'express';
-import { VerificationCode, User, CalendarSave, EventUpvote, EventComment } from '../models';
+import { VerificationCode, User, CalendarSave, EventUpvote, EventComment, EventRSVP, EventFeedback } from '../models';
 import { sendVerificationEmail } from '../email';
 import { authMiddleware } from '../middleware';
 import bcrypt from 'bcryptjs';
 import mongoose from 'mongoose';
 
 const router: Router = Router();
+
+function deriveBadges(profile: {
+  isAlumni?: boolean;
+  role?: string;
+  points?: number;
+  savedEvents?: number;
+  upvotedEvents?: number;
+  comments?: number;
+  checkedInEvents?: number;
+}) {
+  const badges = new Set<string>();
+  if (profile.isAlumni) badges.add('Alumni Network');
+  if (profile.role === 'professor') badges.add('Faculty Mentor');
+  if ((profile.savedEvents || 0) >= 5) badges.add('Planner');
+  if ((profile.upvotedEvents || 0) >= 10) badges.add('Trend Spotter');
+  if ((profile.comments || 0) >= 5) badges.add('Conversation Starter');
+  if ((profile.checkedInEvents || 0) >= 5) badges.add('Campus Regular');
+  if ((profile.points || 0) >= 250) badges.add('Tech Enthusiast');
+  return Array.from(badges);
+}
 
 // Generate random 6-digit code
 function generateVerificationCode(): string {
@@ -40,10 +60,10 @@ router.post('/send-verification-code', async (req: Request, res: Response) => {
     // Send email in background (don't wait for it to complete)
     // This makes the API response faster
     const emailPromise = sendVerificationEmail(email, code);
-    
+
     // Return response immediately while email sends in background
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       message: 'Verification code sent to email',
       // For development only - remove in production
       code: process.env.NODE_ENV === 'development' ? code : undefined,
@@ -175,9 +195,9 @@ router.post('/set-password', async (req: Request, res: Response) => {
     }
 
     // Check if email was verified (user must have a verified verification code)
-    const verifiedCode = await VerificationCode.findOne({ 
-      email, 
-      verified: true 
+    const verifiedCode = await VerificationCode.findOne({
+      email,
+      verified: true
     }).sort({ createdAt: -1 });
 
     if (!verifiedCode) {
@@ -229,17 +249,40 @@ router.get('/me', authMiddleware, async (req: Request, res: Response) => {
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
-    
+
     // Get user stats
     const userId = new mongoose.Types.ObjectId(req.userId);
-    const [savedCount, upvotedCount, commentsCount] = await Promise.all([
+    const [savedCount, upvotedCount, commentsCount, checkedInCount, feedbackCount] = await Promise.all([
       CalendarSave.countDocuments({ userId }),
       EventUpvote.countDocuments({ userId }),
       EventComment.countDocuments({ userId }),
+      EventRSVP.countDocuments({ userId, status: 'checked_in' }),
+      EventFeedback.countDocuments({ userId }),
     ]);
 
     const MAIN_ADMIN_EMAIL = 'mukunds23@iitk.ac.in';
     const isMainAdmin = user.email?.toLowerCase() === MAIN_ADMIN_EMAIL;
+    const points =
+      checkedInCount * 25 +
+      upvotedCount * 2 +
+      commentsCount * 5 +
+      savedCount * 3 +
+      feedbackCount * 8;
+    const badges = deriveBadges({
+      isAlumni: user.isAlumni,
+      role: user.role,
+      points,
+      savedEvents: savedCount,
+      upvotedEvents: upvotedCount,
+      comments: commentsCount,
+      checkedInEvents: checkedInCount,
+    });
+
+    if ((user.points || 0) !== points || JSON.stringify(user.badges || []) !== JSON.stringify(badges)) {
+      user.points = points;
+      user.badges = badges;
+      await user.save();
+    }
 
     res.json({
       _id: user._id,
@@ -250,12 +293,19 @@ router.get('/me', authMiddleware, async (req: Request, res: Response) => {
       branch: user.branch,
       avatar: user.avatar,
       role: user.role,
+      academicLevel: user.academicLevel,
+      isAlumni: !!user.isAlumni,
+      points,
+      badges,
+      fcmTokenCount: Array.isArray(user.fcmTokens) ? user.fcmTokens.length : 0,
       isMainAdmin: !!isMainAdmin,
       createdAt: user.createdAt,
       stats: {
         savedEvents: savedCount,
         upvotedEvents: upvotedCount,
         comments: commentsCount,
+        checkedInEvents: checkedInCount,
+        feedbackSubmitted: feedbackCount,
       },
     });
   } catch (error) {
@@ -267,9 +317,9 @@ router.get('/me', authMiddleware, async (req: Request, res: Response) => {
 // Update user profile
 router.patch('/profile', authMiddleware, async (req: Request, res: Response) => {
   try {
-    const { displayName, name, rollNo, branch, avatar } = req.body;
+    const { displayName, name, rollNo, branch, avatar, academicLevel, isAlumni } = req.body;
     const user = await User.findById(req.userId);
-    
+
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
@@ -312,6 +362,18 @@ router.patch('/profile', authMiddleware, async (req: Request, res: Response) => 
       user.avatar = avatar.trim() || undefined;
     }
 
+    if (academicLevel !== undefined) {
+      const allowedLevels = ['ug', 'pg', 'phd', 'faculty', 'staff'];
+      if (academicLevel && !allowedLevels.includes(academicLevel)) {
+        return res.status(400).json({ error: 'Invalid academic level' });
+      }
+      user.academicLevel = academicLevel || undefined;
+    }
+
+    if (isAlumni !== undefined) {
+      user.isAlumni = !!isAlumni;
+    }
+
     await user.save();
 
     res.json({
@@ -325,11 +387,51 @@ router.patch('/profile', authMiddleware, async (req: Request, res: Response) => 
         branch: user.branch,
         avatar: user.avatar,
         role: user.role,
+        academicLevel: user.academicLevel,
+        isAlumni: !!user.isAlumni,
+        points: user.points || 0,
+        badges: user.badges || [],
       },
     });
   } catch (error) {
     console.error('Error updating profile:', error);
     res.status(500).json({ error: 'Failed to update profile' });
+  }
+});
+
+router.post('/push-token', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const token = typeof req.body?.token === 'string' ? req.body.token.trim() : '';
+    if (!token) {
+      return res.status(400).json({ error: 'Push token is required' });
+    }
+    const user = await User.findByIdAndUpdate(
+      req.userId,
+      { $addToSet: { fcmTokens: token } },
+      { new: true },
+    ).select('fcmTokens');
+    res.json({ success: true, tokenCount: user?.fcmTokens?.length || 0 });
+  } catch (error) {
+    console.error('Error registering push token:', error);
+    res.status(500).json({ error: 'Failed to register push token' });
+  }
+});
+
+router.delete('/push-token', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const token = typeof req.body?.token === 'string' ? req.body.token.trim() : '';
+    if (!token) {
+      return res.status(400).json({ error: 'Push token is required' });
+    }
+    const user = await User.findByIdAndUpdate(
+      req.userId,
+      { $pull: { fcmTokens: token } },
+      { new: true },
+    ).select('fcmTokens');
+    res.json({ success: true, tokenCount: user?.fcmTokens?.length || 0 });
+  } catch (error) {
+    console.error('Error removing push token:', error);
+    res.status(500).json({ error: 'Failed to remove push token' });
   }
 });
 

@@ -2,19 +2,23 @@ import { Button } from "@/components/ui/button.tsx";
 import { Badge } from "@/components/ui/badge.tsx";
 import { cn } from "@/lib/utils.ts";
 import { groupOrganizations } from "@/lib/org-hierarchy.ts";
-import { Compass, Flame, Layers3, Sparkles, Users2 } from "lucide-react";
+import { Check, Compass, Flame, Layers3, Plus, Sparkles, Users2 } from "lucide-react";
 
 type Organization = any;
 
 type OrganizationFilterProps = {
   organizations: Organization[];
   selectedId: string | null;
-  onSelect: (id: string | null) => void;
+  isAuthenticated: boolean;
+  subscribedOrganizations: Organization[];
+  onSelect: (id: string) => void;
 };
 
 export default function OrganizationFilter({
   organizations,
   selectedId,
+  isAuthenticated,
+  subscribedOrganizations,
   onSelect,
 }: OrganizationFilterProps) {
   const { councils, festivals, others } = groupOrganizations(organizations);
@@ -23,8 +27,8 @@ export default function OrganizationFilter({
     .sort((a, b) => a.name.localeCompare(b.name));
 
   return (
-    <div className="max-h-[75vh] overflow-y-auto rounded-[1.75rem] border border-border/60 bg-card/70 p-4 shadow-[0_18px_60px_rgba(16,24,40,0.05)] backdrop-blur-xl no-scrollbar">
-      <div className="mb-5 rounded-2xl border border-primary/10 bg-gradient-to-br from-primary/10 via-background to-accent/10 p-4">
+    <div className="max-h-[75vh] overflow-y-auto rounded-[1.75rem] border border-white/65 bg-[linear-gradient(145deg,rgba(255,255,255,0.95),rgba(248,250,252,0.9))] p-4 shadow-[0_18px_50px_rgba(15,23,42,0.08)] backdrop-blur-xl no-scrollbar">
+      <div className="mb-5 rounded-[1.45rem] border border-white/70 bg-[radial-gradient(circle_at_top_left,rgba(250,204,21,0.18),transparent_35%),radial-gradient(circle_at_bottom_right,rgba(96,165,250,0.14),transparent_40%),linear-gradient(145deg,#fff8ef_0%,#ffffff_55%,#f3f8ff_100%)] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.85)]">
         <div className="flex items-center gap-2 text-primary">
           <Compass className="h-4 w-4" />
           <p className="text-xs font-semibold uppercase tracking-[0.2em]">Explore</p>
@@ -35,23 +39,71 @@ export default function OrganizationFilter({
         <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
          
         </p>
-        <Badge variant="secondary" className="mt-3 rounded-full px-3 py-1 text-xs">
+        <Badge variant="secondary" className="mt-3 rounded-full bg-white px-3 py-1 text-xs text-slate-700">
           {organizations.length} organizations
         </Badge>
       </div>
 
       <div className="space-y-6 pr-1">
-        <Button
-          variant={selectedId === null ? "default" : "ghost"}
-          className={cn(
-            "h-11 w-full justify-start rounded-2xl px-4",
-            selectedId === null && "bg-primary text-primary-foreground shadow-lg shadow-primary/20"
-          )}
-          onClick={() => onSelect(null)}
-        >
-          <Sparkles className="mr-2 h-4 w-4" />
-          For You
-        </Button>
+      <div>
+        <h3 className="mb-3 flex items-center gap-2 px-2 text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+          <Sparkles className="h-3.5 w-3.5" />
+          Subscribed Orgs
+        </h3>
+
+        {!isAuthenticated && (
+          <div className="rounded-[1.25rem] border border-dashed border-slate-300/80 bg-white/65 p-4 text-sm text-muted-foreground">
+            Sign in to see subscribed organizations here.
+          </div>
+        )}
+
+        {isAuthenticated && subscribedOrganizations.length === 0 && (
+          <div className="rounded-[1.25rem] border border-dashed border-slate-300/80 bg-white/65 p-4 text-sm text-muted-foreground">
+            Subscribe from any event card and your organizations will appear here.
+          </div>
+        )}
+
+        {isAuthenticated && subscribedOrganizations.length > 0 && (
+          <div className="space-y-1">
+            {subscribedOrganizations.slice(0, 8).map((org) => (
+              <Button
+                key={org._id}
+                variant={selectedId === org._id ? "secondary" : "ghost"}
+                className={cn(
+                  "h-auto w-full justify-start gap-3 rounded-[1.15rem] border border-transparent px-3 py-3 transition-colors",
+                  selectedId === org._id ? "border-primary/20 bg-primary/10 text-foreground shadow-[0_10px_20px_rgba(99,102,241,0.08)]" : "hover:bg-white/75"
+                )}
+                onClick={() => onSelect(org._id)}
+              >
+                <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary/20 to-accent/20">
+                  {org.logo ? (
+                    <img
+                      src={org.logo}
+                      alt={org.name}
+                      className="h-6 w-6 rounded-lg object-cover"
+                    />
+                  ) : (
+                    <span className="text-xs font-bold text-primary">
+                      {org.name.charAt(0)}
+                    </span>
+                  )}
+                </div>
+                <div className="min-w-0 flex-1 text-left">
+                  <p className="truncate text-sm font-medium">{org.name}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {selectedId === org._id ? "Currently viewing" : "Tap to filter feed"}
+                  </p>
+                </div>
+                {selectedId === org._id ? (
+                  <Check className="h-4 w-4" />
+                ) : (
+                  <Plus className="h-4 w-4 text-muted-foreground" />
+                )}
+              </Button>
+            ))}
+          </div>
+        )}
+      </div>
 
       {councils.length > 0 && (
         <div>
@@ -65,8 +117,8 @@ export default function OrganizationFilter({
                 key={org._id}
                 variant={selectedId === org._id ? "secondary" : "ghost"}
                 className={cn(
-                  "h-auto w-full justify-start gap-3 rounded-2xl border border-transparent px-3 py-3 transition-all",
-                  selectedId === org._id && "border-primary/20 bg-primary/10 text-foreground"
+                  "h-auto w-full justify-start gap-3 rounded-[1.15rem] border border-transparent px-3 py-3 transition-colors",
+                  selectedId === org._id ? "border-primary/20 bg-primary/10 text-foreground shadow-[0_10px_20px_rgba(99,102,241,0.08)]" : "hover:bg-white/75"
                 )}
                 onClick={() => onSelect(org._id)}
               >
@@ -102,8 +154,8 @@ export default function OrganizationFilter({
                 key={org._id}
                 variant={selectedId === org._id ? "secondary" : "ghost"}
                 className={cn(
-                  "h-auto w-full justify-start gap-3 rounded-2xl border border-transparent px-3 py-3 transition-all",
-                  selectedId === org._id && "border-accent/20 bg-accent/10 text-foreground"
+                  "h-auto w-full justify-start gap-3 rounded-[1.15rem] border border-transparent px-3 py-3 transition-colors",
+                  selectedId === org._id ? "border-accent/20 bg-accent/10 text-foreground shadow-[0_10px_20px_rgba(249,115,22,0.08)]" : "hover:bg-white/75"
                 )}
                 onClick={() => onSelect(org._id)}
               >
@@ -139,8 +191,8 @@ export default function OrganizationFilter({
                 key={org._id}
                 variant={selectedId === org._id ? "secondary" : "ghost"}
                 className={cn(
-                  "h-auto w-full justify-start gap-3 rounded-2xl border border-transparent px-3 py-3 transition-all",
-                  selectedId === org._id && "border-border bg-muted/80 text-foreground"
+                  "h-auto w-full justify-start gap-3 rounded-[1.15rem] border border-transparent px-3 py-3 transition-colors",
+                  selectedId === org._id ? "border-border bg-muted/80 text-foreground shadow-[0_10px_20px_rgba(15,23,42,0.06)]" : "hover:bg-white/75"
                 )}
                 onClick={() => onSelect(org._id)}
               >
@@ -175,8 +227,8 @@ export default function OrganizationFilter({
                 key={org._id}
                 variant={selectedId === org._id ? "secondary" : "ghost"}
                 className={cn(
-                  "h-auto w-full justify-start gap-3 rounded-2xl border border-transparent px-3 py-3 transition-all",
-                  selectedId === org._id && "border-border bg-muted/80 text-foreground"
+                  "h-auto w-full justify-start gap-3 rounded-[1.15rem] border border-transparent px-3 py-3 transition-colors",
+                  selectedId === org._id ? "border-border bg-muted/80 text-foreground shadow-[0_10px_20px_rgba(15,23,42,0.06)]" : "hover:bg-white/75"
                 )}
                 onClick={() => onSelect(org._id)}
               >
@@ -189,6 +241,7 @@ export default function OrganizationFilter({
           </div>
         </div>
       )}
+
       </div>
     </div>
   );

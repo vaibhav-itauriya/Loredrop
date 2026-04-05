@@ -7,7 +7,7 @@ async function getAuthToken(): Promise<string | null> {
   if (token) {
     return token;
   }
-  
+
   // Fallback: try Firebase token if still configured
   try {
     const { getAuth } = await import('firebase/auth');
@@ -19,7 +19,7 @@ async function getAuthToken(): Promise<string | null> {
   } catch (err) {
     // Firebase not available or user not logged in
   }
-  
+
   return null;
 }
 
@@ -126,6 +126,10 @@ export const eventsAPI = {
     return fetchWithAuth(`${API_BASE_URL}/events/upcoming?limit=${limit}`);
   },
 
+  getRecommended: () => {
+    return fetchWithAuth(`${API_BASE_URL}/events/recommended`);
+  },
+
   getEvent: (eventId: string) => {
     return fetchWithAuth(`${API_BASE_URL}/events/${eventId}`);
   },
@@ -134,6 +138,19 @@ export const eventsAPI = {
     return fetchWithAuth(`${API_BASE_URL}/events`, {
       method: 'POST',
       body: JSON.stringify(data),
+    });
+  },
+
+  updateEvent: (eventId: string, data: any) => {
+    return fetchWithAuth(`${API_BASE_URL}/events/${eventId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  },
+
+  deleteEvent: (eventId: string) => {
+    return fetchWithAuth(`${API_BASE_URL}/events/${eventId}`, {
+      method: 'DELETE',
     });
   },
 
@@ -236,10 +253,24 @@ export const authAPI = {
     return fetchWithAuth(`${API_BASE_URL}/auth/me`);
   },
 
-  updateProfile: (data: { displayName?: string; name?: string; rollNo?: string; branch?: string; avatar?: string }) => {
+  updateProfile: (data: { displayName?: string; name?: string; rollNo?: string; branch?: string; avatar?: string; academicLevel?: string; isAlumni?: boolean }) => {
     return fetchWithAuth(`${API_BASE_URL}/auth/profile`, {
       method: 'PATCH',
       body: JSON.stringify(data),
+    });
+  },
+
+  registerPushToken: (token: string) => {
+    return fetchWithAuth(`${API_BASE_URL}/auth/push-token`, {
+      method: 'POST',
+      body: JSON.stringify({ token }),
+    });
+  },
+
+  removePushToken: (token: string) => {
+    return fetchWithAuth(`${API_BASE_URL}/auth/push-token`, {
+      method: 'DELETE',
+      body: JSON.stringify({ token }),
     });
   },
 };
@@ -274,6 +305,36 @@ export const organizationsAPI = {
 
   getUserMemberships: async () => {
     return fetchWithAuth(`${API_BASE_URL}/organizations/user/memberships`);
+  },
+
+  updateOrganization: async (organizationId: string, data: {
+    name?: string;
+    slug?: string;
+    description?: string;
+    type?: string;
+    logo?: string;
+    coverImage?: string;
+  }) => {
+    return fetchWithAuth(`${API_BASE_URL}/organizations/${organizationId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  },
+
+  getMySubscriptions: async () => {
+    return fetchWithAuth(`${API_BASE_URL}/organizations/subscriptions/my`);
+  },
+
+  subscribeToOrganization: async (organizationId: string) => {
+    return fetchWithAuth(`${API_BASE_URL}/organizations/${organizationId}/subscribe`, {
+      method: 'POST',
+    });
+  },
+
+  unsubscribeFromOrganization: async (organizationId: string) => {
+    return fetchWithAuth(`${API_BASE_URL}/organizations/${organizationId}/subscribe`, {
+      method: 'DELETE',
+    });
   },
 
   getOrganizationAdmins: async () => {
@@ -311,6 +372,70 @@ export const organizationRequestsAPI = {
   reject: (requestId: string) => {
     return fetchWithAuth(`${API_BASE_URL}/organization-requests/reject/${requestId}`, {
       method: 'POST',
+    });
+  },
+};
+
+export const organizerAPI = {
+  getTasks: (organizationId: string, eventId?: string) => {
+    const params = new URLSearchParams();
+    if (eventId) params.set('eventId', eventId);
+    const query = params.toString();
+    return fetchWithAuth(`${API_BASE_URL}/organizer/organization/${organizationId}/tasks${query ? `?${query}` : ''}`);
+  },
+
+  createTask: (organizationId: string, data: any) => {
+    return fetchWithAuth(`${API_BASE_URL}/organizer/organization/${organizationId}/tasks`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  updateTask: (taskId: string, data: any) => {
+    return fetchWithAuth(`${API_BASE_URL}/organizer/tasks/${taskId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  },
+
+  getAnalytics: (organizationId: string) => {
+    return fetchWithAuth(`${API_BASE_URL}/organizer/organization/${organizationId}/analytics`);
+  },
+
+  getPendingFeedback: () => {
+    return fetchWithAuth(`${API_BASE_URL}/organizer/feedback/pending`);
+  },
+
+  submitFeedback: (eventId: string, data: { rating: number; feedback?: string }) => {
+    return fetchWithAuth(`${API_BASE_URL}/organizer/feedback/${eventId}`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  getEventFeedback: (eventId: string) => {
+    return fetchWithAuth(`${API_BASE_URL}/organizer/event/${eventId}/feedback`);
+  },
+
+  getChannels: (organizationId: string) => {
+    return fetchWithAuth(`${API_BASE_URL}/organizer/organization/${organizationId}/channels`);
+  },
+
+  createChannel: (organizationId: string, data: { name: string; type?: 'organization' | 'event'; eventId?: string }) => {
+    return fetchWithAuth(`${API_BASE_URL}/organizer/organization/${organizationId}/channels`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  getMessages: (channelId: string) => {
+    return fetchWithAuth(`${API_BASE_URL}/organizer/channels/${channelId}/messages`);
+  },
+
+  postMessage: (channelId: string, message: string) => {
+    return fetchWithAuth(`${API_BASE_URL}/organizer/channels/${channelId}/messages`, {
+      method: 'POST',
+      body: JSON.stringify({ message }),
     });
   },
 };

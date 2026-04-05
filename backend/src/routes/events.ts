@@ -120,6 +120,31 @@ function buildEventIcs(event: any) {
   ].join('\r\n');
 }
 
+function scoreRecommendedEvent(event: any, context: {
+  branch?: string;
+  academicLevel?: string;
+  followedOrgIds: Set<string>;
+  preferredTags: Set<string>;
+  interactedEventIds: Set<string>;
+}) {
+  let score = 0;
+  const eventTags = Array.isArray(event.tags) ? event.tags.map((tag: string) => tag.toLowerCase()) : [];
+  if (context.followedOrgIds.has(String(event.organizationId?._id || event.organizationId))) score += 25;
+  if (eventTags.some((tag: string) => context.preferredTags.has(tag))) score += 18;
+  if (context.academicLevel && Array.isArray(event.audience) && (event.audience.includes(context.academicLevel) || event.audience.includes('all'))) score += 12;
+  if (context.branch) {
+    const branchText = `${event.title} ${event.description} ${eventTags.join(' ')}`.toLowerCase();
+    const branchKey = context.branch.toLowerCase().split(' ')[0];
+    if (branchText.includes(branchKey)) score += 10;
+  }
+  if (context.interactedEventIds.has(String(event._id))) score -= 50;
+  const eventTime = new Date(event.dateTime).getTime();
+  const daysAway = Math.max(0, Math.round((eventTime - Date.now()) / (24 * 60 * 60 * 1000)));
+  score += Math.max(0, 14 - daysAway);
+  score += Math.min(10, Math.round((event.upvoteCount || 0) / 3));
+  return score;
+}
+
 // Get feed events (paginated, with optional filters)
 router.get('/feed', optionalAuthMiddleware, async (req: Request, res: Response) => {
   try {
@@ -225,6 +250,63 @@ router.get('/upcoming', async (req: Request, res: Response) => {
     res.json(events);
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch upcoming events' });
+  }
+});
+
+router.get('/recommended', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const user = await User.findById(req.userId).select('branch academicLevel');
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const userId = new mongoose.Types.ObjectId(req.userId);
+    const [memberships, upvotes, saves, rsvps] = await Promise.all([
+      OrganizationMember.find({ userId }).select('organizationId'),
+      EventUpvote.find({ userId }).populate('eventId', 'tags').select('eventId'),
+      CalendarSave.find({ userId }).populate('eventId', 'tags').select('eventId'),
+      EventRSVP.find({ userId }).select('eventId'),
+    ]);
+
+    const followedOrgIds = new Set(memberships.map((membership) => String(membership.organizationId)));
+    const interactedEventIds = new Set([
+      ...upvotes.map((item: any) => String(item.eventId?._id || item.eventId)),
+      ...saves.map((item: any) => String(item.eventId?._id || item.eventId)),
+      ...rsvps.map((item) => String(item.eventId)),
+    ]);
+    const preferredTags = new Set<string>();
+    [...upvotes, ...saves].forEach((item: any) => {
+      const tags = Array.isArray(item.eventId?.tags) ? item.eventId.tags : [];
+      tags.forEach((tag: string) => preferredTags.add(String(tag).toLowerCase()));
+    });
+
+    const candidates = await Event.find({
+      isPublished: true,
+      dateTime: { $gte: new Date() },
+    })
+      .populate('organizationId', 'name logo slug type description')
+      .populate('authorId', 'displayName avatar email')
+      .sort({ dateTime: 1 })
+      .limit(40);
+
+    const ranked = candidates
+      .map((event) => ({
+        ...event.toObject(),
+        recommendationScore: scoreRecommendedEvent(event, {
+          branch: user.branch,
+          academicLevel: user.academicLevel,
+          followedOrgIds,
+          preferredTags,
+          interactedEventIds,
+        }),
+      }))
+      .sort((a, b) => b.recommendationScore - a.recommendationScore)
+      .slice(0, 8);
+
+    res.json(ranked);
+  } catch (error) {
+    console.error('Recommendation error:', error);
+    res.status(500).json({ error: 'Failed to fetch recommended events' });
   }
 });
 
@@ -530,6 +612,51 @@ router.patch('/:eventId', authMiddleware, async (req: Request, res: Response) =>
   } catch (error) {
     console.error('Update event error:', error);
     res.status(500).json({ error: 'Failed to update event' });
+  }
+});
+
+router.delete('/:eventId', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const event = await Event.findById(req.params.eventId);
+    if (!event) {
+      return res.status(404).json({ error: 'Event not found' });
+    }
+
+    if (!req.userId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const permission = await canOrgAction(req.userId, event.organizationId, 'edit_event');
+    const isAuthor = event.authorId.toString() === req.userId;
+    if (!permission.allowed && !isAuthor) {
+      return res.status(403).json({ error: 'You are not allowed to delete this event' });
+    }
+
+    await Promise.all([
+      Event.deleteOne({ _id: event._id }),
+      EventUpvote.deleteMany({ eventId: event._id }),
+      EventComment.deleteMany({ eventId: event._id }),
+      CalendarSave.deleteMany({ eventId: event._id }),
+      Notification.deleteMany({ eventId: event._id }),
+      EventRSVP.deleteMany({ eventId: event._id }),
+    ]);
+
+    await logAudit({
+      actorUserId: req.userId,
+      action: 'event.deleted',
+      entityType: 'event',
+      entityId: event._id,
+      organizationId: event.organizationId,
+      metadata: {
+        role: permission.role,
+        title: event.title,
+      },
+    });
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Delete event error:', error);
+    res.status(500).json({ error: 'Failed to delete event' });
   }
 });
 

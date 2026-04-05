@@ -42,10 +42,10 @@ export default function UpcomingEventsSidebar({ events }: UpcomingEventsSidebarP
         {events.map((event) => (
           <Card
             key={event._id}
-            className="group overflow-hidden border-border/60 bg-card/70 p-4 backdrop-blur-sm transition-all duration-300 hover:-translate-y-1 hover:border-primary/30 hover:shadow-[0_20px_50px_rgba(88,74,217,0.12)]"
+            className="group overflow-hidden border-white/60 bg-[linear-gradient(145deg,rgba(255,255,255,0.92),rgba(248,250,252,0.88))] p-4 backdrop-blur-xl transition-all duration-300 hover:-translate-y-1 hover:border-primary/30 hover:shadow-[0_22px_55px_rgba(88,74,217,0.12)]"
           >
             <div className="flex gap-3">
-              <div className="flex h-12 w-12 flex-shrink-0 flex-col items-center justify-center rounded-2xl border border-primary/15 bg-gradient-to-br from-primary/15 to-accent/15">
+              <div className="flex h-12 w-12 flex-shrink-0 flex-col items-center justify-center rounded-2xl border border-white/70 bg-[linear-gradient(145deg,rgba(99,102,241,0.16),rgba(249,115,22,0.12))] shadow-[inset_0_1px_0_rgba(255,255,255,0.8)]">
                 <span className="text-xs font-medium text-primary">
                   {format(new Date(event.dateTime), "MMM")}
                 </span>
@@ -74,7 +74,7 @@ export default function UpcomingEventsSidebar({ events }: UpcomingEventsSidebarP
             </div>
 
             {event.organization && (
-              <Badge variant="secondary" className="mt-3 rounded-full bg-primary/8 text-xs text-primary">
+              <Badge variant="secondary" className="mt-3 rounded-full border border-white/70 bg-white/70 text-xs text-primary shadow-sm">
                 {event.organization.name}
               </Badge>
             )}

@@ -1,8 +1,9 @@
 import { Router, Request, Response } from 'express';
-import { Organization, OrganizationMember, User, Event, CalendarSave, EventUpvote, EventComment, EventRSVP, AuditLog } from '../models';
+import { Organization, OrganizationMember, OrganizationSubscription, User, Event, CalendarSave, EventUpvote, EventComment, EventRSVP, AuditLog } from '../models';
 import { authMiddleware } from '../middleware';
 import mongoose from 'mongoose';
 import { logAudit } from '../audit';
+import { canOrgAction } from '../permissions';
 
 const router: Router = Router();
 const MAIN_ADMIN_EMAIL = 'mukunds23@iitk.ac.in';
@@ -317,6 +318,164 @@ router.get('/user/memberships', authMiddleware, async (req: Request, res: Respon
   } catch (error) {
     console.error('Error fetching user memberships:', error);
     res.status(500).json({ error: 'Failed to fetch memberships' });
+  }
+});
+
+router.get('/subscriptions/my', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const userId = new mongoose.Types.ObjectId(req.userId);
+    const subscriptions = await OrganizationSubscription.find({ userId })
+      .populate('organizationId', 'name slug description logo followerCount')
+      .sort({ createdAt: -1 });
+
+    res.json(
+      subscriptions
+        .map((subscription) => (subscription.organizationId as any)?.toObject?.())
+        .filter(Boolean)
+    );
+  } catch (error) {
+    console.error('Failed to fetch subscriptions:', error);
+    res.status(500).json({ error: 'Failed to fetch subscriptions' });
+  }
+});
+
+router.post('/:orgId/subscribe', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const { orgId } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(orgId)) {
+      return res.status(400).json({ error: 'Invalid organization id' });
+    }
+
+    const userId = new mongoose.Types.ObjectId(req.userId);
+    const organizationId = new mongoose.Types.ObjectId(orgId);
+
+    const [organization, existing] = await Promise.all([
+      Organization.findById(organizationId),
+      OrganizationSubscription.findOne({ userId, organizationId }),
+    ]);
+
+    if (!organization) {
+      return res.status(404).json({ error: 'Organization not found' });
+    }
+
+    if (existing) {
+      return res.json({ subscribed: true });
+    }
+
+    await Promise.all([
+      OrganizationSubscription.create({ userId, organizationId }),
+      Organization.updateOne({ _id: organizationId }, { $inc: { followerCount: 1 } }),
+    ]);
+
+    res.json({ subscribed: true });
+  } catch (error) {
+    console.error('Failed to subscribe to organization:', error);
+    res.status(500).json({ error: 'Failed to subscribe to organization' });
+  }
+});
+
+router.delete('/:orgId/subscribe', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const { orgId } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(orgId)) {
+      return res.status(400).json({ error: 'Invalid organization id' });
+    }
+
+    const userId = new mongoose.Types.ObjectId(req.userId);
+    const organizationId = new mongoose.Types.ObjectId(orgId);
+
+    const existing = await OrganizationSubscription.findOne({ userId, organizationId });
+    if (!existing) {
+      return res.json({ subscribed: false });
+    }
+
+    await Promise.all([
+      OrganizationSubscription.deleteOne({ _id: existing._id }),
+      Organization.updateOne({ _id: organizationId }, { $inc: { followerCount: -1 } }),
+    ]);
+
+    res.json({ subscribed: false });
+  } catch (error) {
+    console.error('Failed to unsubscribe from organization:', error);
+    res.status(500).json({ error: 'Failed to unsubscribe from organization' });
+  }
+});
+
+router.patch('/:orgId', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const { orgId } = req.params;
+    if (!req.userId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(orgId)) {
+      return res.status(400).json({ error: 'Invalid organization id' });
+    }
+
+    const permission = await canOrgAction(req.userId, orgId, 'manage_organization');
+    if (!permission.allowed) {
+      return res.status(403).json({ error: 'You are not allowed to manage this organization' });
+    }
+
+    const organization = await Organization.findById(orgId);
+    if (!organization) {
+      return res.status(404).json({ error: 'Organization not found' });
+    }
+
+    const update: Record<string, any> = {};
+    const allowedStringFields = ['name', 'description', 'logo', 'coverImage'];
+    for (const field of allowedStringFields) {
+      if (typeof req.body?.[field] === 'string') {
+        update[field] = req.body[field].trim();
+      }
+    }
+
+    if (typeof req.body?.type === 'string') {
+      const type = req.body.type.trim();
+      if (!['council', 'club', 'festival', 'department', 'other'].includes(type)) {
+        return res.status(400).json({ error: 'Invalid organization type' });
+      }
+      update.type = type;
+    }
+
+    if (typeof req.body?.slug === 'string') {
+      const slug = req.body.slug
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '');
+      if (!slug) {
+        return res.status(400).json({ error: 'Slug cannot be empty' });
+      }
+      const existing = await Organization.findOne({ slug, _id: { $ne: organization._id } }).select('_id');
+      if (existing) {
+        return res.status(400).json({ error: 'Another organization already uses that slug' });
+      }
+      update.slug = slug;
+    }
+
+    const updated = await Organization.findByIdAndUpdate(
+      organization._id,
+      { $set: update },
+      { new: true }
+    );
+
+    await logAudit({
+      actorUserId: req.userId,
+      action: 'organization.updated',
+      entityType: 'system',
+      entityId: organization._id,
+      organizationId: organization._id,
+      metadata: {
+        role: permission.role,
+        updatedFields: Object.keys(update),
+      },
+    });
+
+    res.json(updated);
+  } catch (error) {
+    console.error('Failed to update organization:', error);
+    res.status(500).json({ error: 'Failed to update organization' });
   }
 });
 

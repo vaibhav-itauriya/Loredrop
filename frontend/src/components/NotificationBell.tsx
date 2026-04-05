@@ -5,7 +5,6 @@ import {
   MessageCircle,
   Heart,
   Calendar,
-  Users,
   Shield,
   CheckCheck,
   Loader2,
@@ -18,13 +17,19 @@ import {
 } from "@/components/ui/popover.tsx";
 import { interactionsAPI } from "@/lib/api";
 import { cn } from "@/lib/utils.ts";
+import {
+  announceNewNotifications,
+  getNotificationPermission,
+  requestDeviceNotificationPermission,
+} from "@/lib/device-notifications.ts";
 
 type NotificationType =
   | "event_comment"
   | "event_like"
   | "new_org_event"
   | "event_reminder"
-  | "access_request";
+  | "access_request"
+  | "feedback_request";
 
 interface Notification {
   _id: string;
@@ -50,6 +55,8 @@ function getNotificationIcon(type: NotificationType) {
       return <Bell className="w-4 h-4 text-amber-500" />;
     case "access_request":
       return <Shield className="w-4 h-4 text-violet-500" />;
+    case "feedback_request":
+      return <MessageCircle className="w-4 h-4 text-amber-500" />;
     default:
       return <Bell className="w-4 h-4 text-muted-foreground" />;
   }
@@ -76,6 +83,7 @@ export default function NotificationBell() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [permission, setPermission] = useState<string>(getNotificationPermission());
 
   const fetchNotifications = async () => {
     try {
@@ -83,6 +91,7 @@ export default function NotificationBell() {
       const data = await interactionsAPI.getNotifications();
       setNotifications(data);
       setUnreadCount(data.filter((n: Notification) => !n.read).length);
+      await announceNewNotifications(data);
     } catch (error) {
       console.error("Failed to fetch notifications:", error);
     } finally {
@@ -94,6 +103,14 @@ export default function NotificationBell() {
   useEffect(() => {
     fetchNotifications();
   }, []);
+
+  const handleEnableDeviceNotifications = async () => {
+    const nextPermission = await requestDeviceNotificationPermission();
+    setPermission(nextPermission);
+    if (nextPermission === "granted") {
+      fetchNotifications();
+    }
+  };
 
   useEffect(() => {
     if (open) {
@@ -123,6 +140,10 @@ export default function NotificationBell() {
       setOpen(false);
       if (notification.type === "access_request") {
         navigate("/admin");
+        return;
+      }
+      if (notification.type === "feedback_request") {
+        navigate("/profile");
         return;
       }
       const eventId = notification.eventId;
@@ -177,6 +198,22 @@ export default function NotificationBell() {
               </Button>
             )}
           </div>
+          {permission !== "granted" && permission !== "unsupported" && (
+            <div className="mt-3 rounded-lg border bg-muted/40 p-3">
+              <p className="text-sm font-medium">Enable device notifications</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Get reminders and updates in your browser/device notification tray.
+              </p>
+              <Button size="sm" className="mt-3" onClick={handleEnableDeviceNotifications}>
+                Allow Notifications
+              </Button>
+            </div>
+          )}
+          {permission === "unsupported" && (
+            <p className="mt-3 text-xs text-muted-foreground">
+              Device notifications are not supported in this browser.
+            </p>
+          )}
         </div>
 
         <div className="max-h-[400px] overflow-y-auto">

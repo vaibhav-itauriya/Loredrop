@@ -6,8 +6,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input.tsx';
 import { Textarea } from '@/components/ui/textarea.tsx';
 import { Label } from '@/components/ui/label.tsx';
-import { Plus, ArrowLeft, Calendar, Users, X, UserPlus, AlertCircle, Check, XCircle, Shield } from 'lucide-react';
-import { eventsAPI, organizationsAPI, authAPI, organizationRequestsAPI } from '@/lib/api';
+import { Plus, ArrowLeft, Calendar, Users, X, UserPlus, AlertCircle, Check, XCircle, Shield, BarChart3, KanbanSquare, MessageSquare } from 'lucide-react';
+import { eventsAPI, organizationsAPI, authAPI, organizationRequestsAPI, organizerAPI } from '@/lib/api';
 import { Alert, AlertDescription } from '@/components/ui/alert.tsx';
 import { buildOrganizationOptions } from '@/lib/org-hierarchy.ts';
 
@@ -47,6 +47,61 @@ interface AnalyticsOverview {
     totalSaves: number;
     totalRsvps: number;
     totalCheckIns: number;
+  };
+}
+
+interface OrganizerTask {
+  _id: string;
+  title: string;
+  description?: string;
+  status: 'todo' | 'in_progress' | 'done';
+  category: string;
+  budgetAmount?: number;
+  inventoryItems?: string[];
+  dueDate?: string;
+}
+
+interface OrganizerAnalytics {
+  summary?: {
+    totalEvents: number;
+    totalRsvps: number;
+    totalCheckedIn: number;
+    conversionRate: number;
+    averageRating: number;
+    feedbackResponses: number;
+    totalBudget: number;
+    inventoryTracked: number;
+  };
+  audienceBreakdown?: Record<string, number>;
+  taskBoard?: {
+    todo: number;
+    inProgress: number;
+    done: number;
+  };
+  eventSummaries?: Array<{
+    eventId: string;
+    title: string;
+    conversionRate: number;
+    averageRating: number;
+    rsvps: number;
+    checkedIn: number;
+  }>;
+}
+
+interface OrganizerChannel {
+  _id: string;
+  name: string;
+  type: 'organization' | 'event';
+}
+
+interface OrganizerMessage {
+  _id: string;
+  message: string;
+  createdAt: string;
+  userId?: {
+    displayName?: string;
+    email?: string;
+    isAlumni?: boolean;
   };
 }
 
@@ -95,6 +150,27 @@ export default function AdminPage() {
 
   const [events, setEvents] = useState<any[]>([]);
   const [timeConflictEvent, setTimeConflictEvent] = useState<any | null>(null);
+  const [organizerTasks, setOrganizerTasks] = useState<OrganizerTask[]>([]);
+  const [organizerAnalytics, setOrganizerAnalytics] = useState<OrganizerAnalytics | null>(null);
+  const [loadingOrganizerData, setLoadingOrganizerData] = useState(false);
+  const [channels, setChannels] = useState<OrganizerChannel[]>([]);
+  const [selectedChannelId, setSelectedChannelId] = useState<string>('');
+  const [messages, setMessages] = useState<OrganizerMessage[]>([]);
+  const [loadingMessages, setLoadingMessages] = useState(false);
+  const [taskForm, setTaskForm] = useState({
+    title: '',
+    description: '',
+    category: 'planning',
+    budgetAmount: '',
+    inventoryItems: '',
+    dueDate: '',
+  });
+  const [messageDraft, setMessageDraft] = useState('');
+  const [channelForm, setChannelForm] = useState({
+    name: '',
+    type: 'organization' as 'organization' | 'event',
+    eventId: '',
+  });
 
   const liveConflicts = useMemo(() => {
     if (!eventForm.dateTime || !events.length) return [];
@@ -144,6 +220,7 @@ export default function AdminPage() {
         setOrganizations(orgs);
         setSelectedOrg(orgs[0]);
         fetchEvents(orgs[0]._id);
+        fetchOrganizerWorkspace(orgs[0]._id);
       }
     } catch (err) {
       console.error('Failed to check membership:', err);
@@ -199,6 +276,14 @@ export default function AdminPage() {
       fetchAnalyticsOverview();
     }
   }, [isAuthenticated, isMainAdmin]);
+
+  useEffect(() => {
+    if (selectedChannelId) {
+      fetchChannelMessages(selectedChannelId);
+    } else {
+      setMessages([]);
+    }
+  }, [selectedChannelId]);
 
   const handleApproveRequest = async (requestId: string) => {
     try {
@@ -263,6 +348,78 @@ export default function AdminPage() {
     await submitEvent(false);
   };
 
+  const handleCreateTask = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedOrg || !taskForm.title.trim()) return;
+
+    try {
+      await organizerAPI.createTask(selectedOrg._id, {
+        title: taskForm.title.trim(),
+        description: taskForm.description.trim(),
+        category: taskForm.category,
+        budgetAmount: taskForm.budgetAmount ? Number(taskForm.budgetAmount) : undefined,
+        inventoryItems: taskForm.inventoryItems.split(',').map((item) => item.trim()).filter(Boolean),
+        dueDate: taskForm.dueDate || undefined,
+      });
+      setTaskForm({
+        title: '',
+        description: '',
+        category: 'planning',
+        budgetAmount: '',
+        inventoryItems: '',
+        dueDate: '',
+      });
+      fetchOrganizerWorkspace(selectedOrg._id);
+      setSuccessMessage('Organizer task created.');
+      setTimeout(() => setSuccessMessage(null), 3000);
+    } catch (err: any) {
+      setError(err?.message || 'Failed to create organizer task');
+    }
+  };
+
+  const handleAdvanceTask = async (task: OrganizerTask) => {
+    const nextStatus =
+      task.status === 'todo' ? 'in_progress' : task.status === 'in_progress' ? 'done' : 'todo';
+    try {
+      await organizerAPI.updateTask(task._id, { status: nextStatus });
+      if (selectedOrg) {
+        fetchOrganizerWorkspace(selectedOrg._id);
+      }
+    } catch (err: any) {
+      setError(err?.message || 'Failed to update task');
+    }
+  };
+
+  const handleCreateChannel = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedOrg || !channelForm.name.trim()) return;
+    try {
+      await organizerAPI.createChannel(selectedOrg._id, {
+        name: channelForm.name.trim(),
+        type: channelForm.type,
+        eventId: channelForm.type === 'event' ? channelForm.eventId || undefined : undefined,
+      });
+      setChannelForm({ name: '', type: 'organization', eventId: '' });
+      await fetchOrganizerWorkspace(selectedOrg._id);
+      setSuccessMessage('Channel created successfully.');
+      setTimeout(() => setSuccessMessage(null), 3000);
+    } catch (err: any) {
+      setError(err?.message || 'Failed to create channel');
+    }
+  };
+
+  const handleSendMessage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedChannelId || !messageDraft.trim()) return;
+    try {
+      await organizerAPI.postMessage(selectedChannelId, messageDraft.trim());
+      setMessageDraft('');
+      fetchChannelMessages(selectedChannelId);
+    } catch (err: any) {
+      setError(err?.message || 'Failed to send message');
+    }
+  };
+
   const handleRemoveOrganizationAdmin = async (membershipId: string) => {
     try {
       setActingOrgAdminId(membershipId);
@@ -274,6 +431,43 @@ export default function AdminPage() {
       setError(err?.message || 'Failed to remove admin');
     } finally {
       setActingOrgAdminId(null);
+    }
+  };
+
+  const fetchOrganizerWorkspace = async (orgId: string) => {
+    try {
+      setLoadingOrganizerData(true);
+      const [tasks, analytics, orgChannels] = await Promise.all([
+        organizerAPI.getTasks(orgId).catch(() => []),
+        organizerAPI.getAnalytics(orgId).catch(() => null),
+        organizerAPI.getChannels(orgId).catch(() => []),
+      ]);
+      setOrganizerTasks(Array.isArray(tasks) ? tasks : []);
+      setOrganizerAnalytics(analytics);
+      const nextChannels = Array.isArray(orgChannels) ? orgChannels : [];
+      setChannels(nextChannels);
+      if (nextChannels.length === 0) {
+        setSelectedChannelId('');
+      } else if (!nextChannels.some((channel) => channel._id === selectedChannelId)) {
+        setSelectedChannelId(nextChannels[0]._id);
+      }
+    } catch (err) {
+      console.error('Failed to load organizer workspace:', err);
+    } finally {
+      setLoadingOrganizerData(false);
+    }
+  };
+
+  const fetchChannelMessages = async (channelId: string) => {
+    try {
+      setLoadingMessages(true);
+      const data = await organizerAPI.getMessages(channelId);
+      setMessages(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error('Failed to fetch channel messages:', err);
+      setMessages([]);
+    } finally {
+      setLoadingMessages(false);
     }
   };
 
@@ -374,6 +568,7 @@ export default function AdminPage() {
         setUploadedImageDataUrl('');
         setEventForm({ title: '', description: '', location: '', dateTime: '', endDateTime: '', capacity: '', imageUrl: '', tags: '', audience: 'all', isRecurring: false, recurrenceFrequency: 'weekly', recurrenceInterval: '1', recurrenceCount: '1' });
         fetchEvents(selectedOrg._id);
+        fetchOrganizerWorkspace(selectedOrg._id);
         setTimeout(() => setSuccessMessage(null), 3000);
       } else {
         const errorData = await response.json().catch(() => ({}));
@@ -713,6 +908,7 @@ export default function AdminPage() {
                       setSelectedOrg(org);
                       setTimeConflictEvent(null);
                       fetchEvents(org._id);
+                      fetchOrganizerWorkspace(org._id);
                     }}
                     className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${
                       selectedOrg?._id === org._id
@@ -1026,6 +1222,260 @@ export default function AdminPage() {
                     ))}
                   </div>
                 )}
+              </CardContent>
+            </Card>
+
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <KanbanSquare className="w-5 h-5" />
+                    Organizer Task Board
+                  </CardTitle>
+                  <CardDescription>Track planning, budgets, and inventory before events go live</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <form onSubmit={handleCreateTask} className="space-y-3">
+                    <Input
+                      placeholder="Task title"
+                      value={taskForm.title}
+                      onChange={(e) => setTaskForm({ ...taskForm, title: e.target.value })}
+                    />
+                    <Textarea
+                      placeholder="Task notes, owner context, or budget rationale"
+                      value={taskForm.description}
+                      onChange={(e) => setTaskForm({ ...taskForm, description: e.target.value })}
+                    />
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <select
+                        value={taskForm.category}
+                        onChange={(e) => setTaskForm({ ...taskForm, category: e.target.value })}
+                        className="w-full px-3 py-2 border border-input rounded-md bg-background"
+                      >
+                        <option value="planning">Planning</option>
+                        <option value="budget">Budget</option>
+                        <option value="inventory">Inventory</option>
+                        <option value="marketing">Marketing</option>
+                        <option value="logistics">Logistics</option>
+                        <option value="other">Other</option>
+                      </select>
+                      <Input
+                        type="number"
+                        placeholder="Budget"
+                        value={taskForm.budgetAmount}
+                        onChange={(e) => setTaskForm({ ...taskForm, budgetAmount: e.target.value })}
+                      />
+                      <Input
+                        type="datetime-local"
+                        value={taskForm.dueDate}
+                        onChange={(e) => setTaskForm({ ...taskForm, dueDate: e.target.value })}
+                      />
+                    </div>
+                    <Input
+                      placeholder="Inventory items (comma-separated)"
+                      value={taskForm.inventoryItems}
+                      onChange={(e) => setTaskForm({ ...taskForm, inventoryItems: e.target.value })}
+                    />
+                    <Button type="submit" className="w-full">Add Organizer Task</Button>
+                  </form>
+
+                  {loadingOrganizerData ? (
+                    <p className="text-sm text-muted-foreground">Loading task board...</p>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      {(['todo', 'in_progress', 'done'] as const).map((status) => (
+                        <div key={status} className="rounded-lg border p-3 space-y-3">
+                          <p className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+                            {status.replace('_', ' ')}
+                          </p>
+                          {organizerTasks.filter((task) => task.status === status).length === 0 ? (
+                            <p className="text-xs text-muted-foreground">No tasks here yet.</p>
+                          ) : (
+                            organizerTasks
+                              .filter((task) => task.status === status)
+                              .map((task) => (
+                                <button
+                                  key={task._id}
+                                  type="button"
+                                  onClick={() => handleAdvanceTask(task)}
+                                  className="w-full rounded-lg border bg-muted/40 p-3 text-left hover:bg-muted"
+                                >
+                                  <p className="font-medium">{task.title}</p>
+                                  <p className="text-xs text-muted-foreground mt-1">{task.category}</p>
+                                  {task.budgetAmount ? (
+                                    <p className="text-xs text-muted-foreground mt-1">Budget: Rs. {task.budgetAmount}</p>
+                                  ) : null}
+                                  {task.inventoryItems?.length ? (
+                                    <p className="text-xs text-muted-foreground mt-1">
+                                      Inventory: {task.inventoryItems.join(', ')}
+                                    </p>
+                                  ) : null}
+                                </button>
+                              ))
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <BarChart3 className="w-5 h-5" />
+                    Organizer Analytics
+                  </CardTitle>
+                  <CardDescription>Conversion, audience mix, and post-event quality signals</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {!organizerAnalytics?.summary ? (
+                    <p className="text-sm text-muted-foreground">Analytics will appear once your workspace data loads.</p>
+                  ) : (
+                    <>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="rounded-lg border p-3">
+                          <p className="text-xs text-muted-foreground">RSVP to Check-in</p>
+                          <p className="text-2xl font-semibold">{organizerAnalytics.summary.conversionRate}%</p>
+                        </div>
+                        <div className="rounded-lg border p-3">
+                          <p className="text-xs text-muted-foreground">Average Feedback</p>
+                          <p className="text-2xl font-semibold">{organizerAnalytics.summary.averageRating || 0}/5</p>
+                        </div>
+                        <div className="rounded-lg border p-3">
+                          <p className="text-xs text-muted-foreground">Tracked Budget</p>
+                          <p className="text-2xl font-semibold">Rs. {organizerAnalytics.summary.totalBudget || 0}</p>
+                        </div>
+                        <div className="rounded-lg border p-3">
+                          <p className="text-xs text-muted-foreground">Feedback Responses</p>
+                          <p className="text-2xl font-semibold">{organizerAnalytics.summary.feedbackResponses || 0}</p>
+                        </div>
+                      </div>
+
+                      <div className="rounded-lg border p-4">
+                        <p className="text-sm font-medium mb-2">Audience Breakdown</p>
+                        <div className="flex flex-wrap gap-2">
+                          {Object.entries(organizerAnalytics.audienceBreakdown || {}).map(([key, value]) => (
+                            <span key={key} className="rounded-full bg-muted px-3 py-1 text-xs">
+                              {key}: {value}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <p className="text-sm font-medium">Best-performing events</p>
+                        {(organizerAnalytics.eventSummaries || []).slice(0, 4).map((event) => (
+                          <div key={event.eventId} className="rounded-lg border p-3">
+                            <p className="font-medium">{event.title}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {event.checkedIn}/{event.rsvps} checked in • {event.conversionRate}% conversion • {event.averageRating || 0}/5 rating
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <MessageSquare className="w-5 h-5" />
+                  Organizer Messaging
+                </CardTitle>
+                <CardDescription>Lightweight team channels for organization or event coordination</CardDescription>
+              </CardHeader>
+              <CardContent className="grid grid-cols-1 xl:grid-cols-[280px_1fr] gap-6">
+                <div className="space-y-4">
+                  <form onSubmit={handleCreateChannel} className="space-y-3 rounded-lg border p-4">
+                    <Input
+                      placeholder="New channel name"
+                      value={channelForm.name}
+                      onChange={(e) => setChannelForm({ ...channelForm, name: e.target.value })}
+                    />
+                    <select
+                      value={channelForm.type}
+                      onChange={(e) => setChannelForm({ ...channelForm, type: e.target.value as 'organization' | 'event' })}
+                      className="w-full px-3 py-2 border border-input rounded-md bg-background"
+                    >
+                      <option value="organization">Organization Channel</option>
+                      <option value="event">Event Channel</option>
+                    </select>
+                    {channelForm.type === 'event' && (
+                      <select
+                        value={channelForm.eventId}
+                        onChange={(e) => setChannelForm({ ...channelForm, eventId: e.target.value })}
+                        className="w-full px-3 py-2 border border-input rounded-md bg-background"
+                      >
+                        <option value="">Select event</option>
+                        {events.map((event) => (
+                          <option key={event._id} value={event._id}>{event.title}</option>
+                        ))}
+                      </select>
+                    )}
+                    <Button type="submit" className="w-full">Create Channel</Button>
+                  </form>
+
+                  <div className="space-y-2">
+                    {channels.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">No channels yet.</p>
+                    ) : (
+                      channels.map((channel) => (
+                        <button
+                          key={channel._id}
+                          type="button"
+                          onClick={() => setSelectedChannelId(channel._id)}
+                          className={`w-full rounded-lg border px-3 py-2 text-left ${
+                            selectedChannelId === channel._id ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
+                          }`}
+                        >
+                          <p className="font-medium">{channel.name}</p>
+                          <p className="text-xs opacity-80">{channel.type}</p>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                </div>
+
+                <div className="rounded-lg border p-4 space-y-4">
+                  {!selectedChannelId ? (
+                    <p className="text-sm text-muted-foreground">Select a channel to start chatting.</p>
+                  ) : (
+                    <>
+                      <div className="max-h-80 overflow-y-auto space-y-3">
+                        {loadingMessages ? (
+                          <p className="text-sm text-muted-foreground">Loading messages...</p>
+                        ) : messages.length === 0 ? (
+                          <p className="text-sm text-muted-foreground">No messages yet. Start the conversation.</p>
+                        ) : (
+                          messages.map((message) => (
+                            <div key={message._id} className="rounded-lg bg-muted/40 p-3">
+                              <p className="text-sm font-medium">
+                                {message.userId?.displayName || message.userId?.email || 'Member'}
+                                {message.userId?.isAlumni ? ' • Alumni' : ''}
+                              </p>
+                              <p className="text-sm mt-1">{message.message}</p>
+                              <p className="text-xs text-muted-foreground mt-2">
+                                {new Date(message.createdAt).toLocaleString()}
+                              </p>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                      <form onSubmit={handleSendMessage} className="flex gap-2">
+                        <Input
+                          placeholder="Send a message to this channel"
+                          value={messageDraft}
+                          onChange={(e) => setMessageDraft(e.target.value)}
+                        />
+                        <Button type="submit">Send</Button>
+                      </form>
+                    </>
+                  )}
+                </div>
               </CardContent>
             </Card>
           </div>

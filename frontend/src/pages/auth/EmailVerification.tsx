@@ -393,6 +393,7 @@ export default function EmailVerificationPage() {
                   type="password"
                   placeholder="Enter password (min 6 characters)"
                   value={password}
+                  minLength={6}
                   onChange={(e) => {
                     setPassword(e.target.value);
                     setError(null);
@@ -435,7 +436,11 @@ export default function EmailVerificationPage() {
                 </Alert>
               )}
 
-              <Button type="submit" disabled={isLoading || !password || !confirmPassword} className="w-full">
+              <Button
+                type="submit"
+                disabled={isLoading || password.length < 6 || !confirmPassword}
+                className="w-full"
+              >
                 {isLoading ? (
                   <>
                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />

@@ -10,6 +10,11 @@ export interface IUser extends Document {
   branch?: string; // Branch/department
   avatar?: string;
   role?: 'student' | 'professor' | 'admin';
+  academicLevel?: 'ug' | 'pg' | 'phd' | 'faculty' | 'staff';
+  isAlumni?: boolean;
+  points?: number;
+  badges?: string[];
+  fcmTokens?: string[];
   organizationId?: mongoose.Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
@@ -85,7 +90,7 @@ export interface ICalendarSave extends Document {
 
 export interface INotification extends Document {
   userId: mongoose.Types.ObjectId;
-  type: 'event_comment' | 'event_like' | 'new_org_event' | 'event_reminder' | 'access_request';
+  type: 'event_comment' | 'event_like' | 'new_org_event' | 'event_reminder' | 'access_request' | 'feedback_request';
   eventId?: mongoose.Types.ObjectId;
   fromUserId?: mongoose.Types.ObjectId;
   requestId?: mongoose.Types.ObjectId;
@@ -116,6 +121,13 @@ export interface IOrganizationRequest extends Document {
   respondedAt?: Date;
 }
 
+export interface IOrganizationSubscription extends Document {
+  userId: mongoose.Types.ObjectId;
+  organizationId: mongoose.Types.ObjectId;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 export interface IEventRSVP extends Document {
   eventId: mongoose.Types.ObjectId;
   userId: mongoose.Types.ObjectId;
@@ -134,7 +146,51 @@ export interface IAuditLog extends Document {
   organizationId?: mongoose.Types.ObjectId;
   metadata?: Record<string, any>;
   createdAt: Date;
- }
+}
+
+export interface IOrganizerTask extends Document {
+  organizationId: mongoose.Types.ObjectId;
+  eventId?: mongoose.Types.ObjectId;
+  title: string;
+  description?: string;
+  status: 'todo' | 'in_progress' | 'done';
+  category: 'planning' | 'budget' | 'inventory' | 'marketing' | 'logistics' | 'other';
+  assignedToUserId?: mongoose.Types.ObjectId;
+  budgetAmount?: number;
+  inventoryItems: string[];
+  dueDate?: Date;
+  createdByUserId: mongoose.Types.ObjectId;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface IEventFeedback extends Document {
+  eventId: mongoose.Types.ObjectId;
+  userId: mongoose.Types.ObjectId;
+  rating: number;
+  feedback?: string;
+  submittedAt: Date;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface IChatChannel extends Document {
+  organizationId?: mongoose.Types.ObjectId;
+  eventId?: mongoose.Types.ObjectId;
+  type: 'organization' | 'event';
+  name: string;
+  createdByUserId: mongoose.Types.ObjectId;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface IChatMessage extends Document {
+  channelId: mongoose.Types.ObjectId;
+  userId: mongoose.Types.ObjectId;
+  message: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
 
 // Schemas
 const UserSchema = new Schema<IUser>(
@@ -148,6 +204,11 @@ const UserSchema = new Schema<IUser>(
     branch: String, // Branch/department
     avatar: String,
     role: { type: String, enum: ['student', 'professor', 'admin'], default: 'student' },
+    academicLevel: { type: String, enum: ['ug', 'pg', 'phd', 'faculty', 'staff'] },
+    isAlumni: { type: Boolean, default: false },
+    points: { type: Number, default: 0 },
+    badges: { type: [String], default: [] },
+    fcmTokens: { type: [String], default: [] },
     organizationId: { type: Schema.Types.ObjectId, ref: 'Organization' },
   },
   { timestamps: true }
@@ -241,7 +302,7 @@ CalendarSaveSchema.index({ userId: 1 });
 const NotificationSchema = new Schema<INotification>(
   {
     userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
-    type: { type: String, enum: ['event_comment', 'event_like', 'new_org_event', 'event_reminder', 'access_request'], required: true },
+    type: { type: String, enum: ['event_comment', 'event_like', 'new_org_event', 'event_reminder', 'access_request', 'feedback_request'], required: true },
     eventId: { type: Schema.Types.ObjectId, ref: 'Event' },
     fromUserId: { type: Schema.Types.ObjectId, ref: 'User' },
     requestId: { type: Schema.Types.ObjectId, ref: 'OrganizationRequest' },
@@ -294,6 +355,17 @@ OrganizationRequestSchema.index({ userId: 1, organizationId: 1 }, { unique: true
 OrganizationRequestSchema.index({ organizationId: 1 });
 OrganizationRequestSchema.index({ status: 1 });
 
+const OrganizationSubscriptionSchema = new Schema<IOrganizationSubscription>(
+  {
+    userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    organizationId: { type: Schema.Types.ObjectId, ref: 'Organization', required: true },
+  },
+  { timestamps: true }
+);
+
+OrganizationSubscriptionSchema.index({ userId: 1, organizationId: 1 }, { unique: true });
+OrganizationSubscriptionSchema.index({ organizationId: 1 });
+
 const EventRSVPSchema = new Schema<IEventRSVP>(
   {
     eventId: { type: Schema.Types.ObjectId, ref: 'Event', required: true },
@@ -326,6 +398,69 @@ AuditLogSchema.index({ createdAt: -1 });
 AuditLogSchema.index({ organizationId: 1, createdAt: -1 });
 AuditLogSchema.index({ action: 1, createdAt: -1 });
 
+const OrganizerTaskSchema = new Schema<IOrganizerTask>(
+  {
+    organizationId: { type: Schema.Types.ObjectId, ref: 'Organization', required: true },
+    eventId: { type: Schema.Types.ObjectId, ref: 'Event' },
+    title: { type: String, required: true },
+    description: String,
+    status: { type: String, enum: ['todo', 'in_progress', 'done'], default: 'todo' },
+    category: {
+      type: String,
+      enum: ['planning', 'budget', 'inventory', 'marketing', 'logistics', 'other'],
+      default: 'planning',
+    },
+    assignedToUserId: { type: Schema.Types.ObjectId, ref: 'User' },
+    budgetAmount: Number,
+    inventoryItems: { type: [String], default: [] },
+    dueDate: Date,
+    createdByUserId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+  },
+  { timestamps: true }
+);
+
+OrganizerTaskSchema.index({ organizationId: 1, status: 1, dueDate: 1 });
+OrganizerTaskSchema.index({ eventId: 1, status: 1 });
+
+const EventFeedbackSchema = new Schema<IEventFeedback>(
+  {
+    eventId: { type: Schema.Types.ObjectId, ref: 'Event', required: true },
+    userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    rating: { type: Number, required: true, min: 1, max: 5 },
+    feedback: String,
+    submittedAt: { type: Date, default: Date.now },
+  },
+  { timestamps: true }
+);
+
+EventFeedbackSchema.index({ eventId: 1, userId: 1 }, { unique: true });
+EventFeedbackSchema.index({ eventId: 1, rating: 1 });
+
+const ChatChannelSchema = new Schema<IChatChannel>(
+  {
+    organizationId: { type: Schema.Types.ObjectId, ref: 'Organization' },
+    eventId: { type: Schema.Types.ObjectId, ref: 'Event' },
+    type: { type: String, enum: ['organization', 'event'], required: true },
+    name: { type: String, required: true },
+    createdByUserId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+  },
+  { timestamps: true }
+);
+
+ChatChannelSchema.index({ organizationId: 1, type: 1 });
+ChatChannelSchema.index({ eventId: 1, type: 1 }, { unique: true, sparse: true });
+
+const ChatMessageSchema = new Schema<IChatMessage>(
+  {
+    channelId: { type: Schema.Types.ObjectId, ref: 'ChatChannel', required: true },
+    userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    message: { type: String, required: true },
+  },
+  { timestamps: true }
+);
+
+ChatMessageSchema.index({ channelId: 1, createdAt: -1 });
+
 // Export Models
 export const User = mongoose.model<IUser>('User', UserSchema);
 export const Organization = mongoose.model<IOrganization>('Organization', OrganizationSchema);
@@ -337,5 +472,10 @@ export const Notification = mongoose.model<INotification>('Notification', Notifi
 export const OrganizationMember = mongoose.model<IOrganizationMember>('OrganizationMember', OrganizationMemberSchema);
 export const VerificationCode = mongoose.model<IVerificationCode>('VerificationCode', VerificationCodeSchema);
 export const OrganizationRequest = mongoose.model<IOrganizationRequest>('OrganizationRequest', OrganizationRequestSchema);
+export const OrganizationSubscription = mongoose.model<IOrganizationSubscription>('OrganizationSubscription', OrganizationSubscriptionSchema);
 export const EventRSVP = mongoose.model<IEventRSVP>('EventRSVP', EventRSVPSchema);
 export const AuditLog = mongoose.model<IAuditLog>('AuditLog', AuditLogSchema);
+export const OrganizerTask = mongoose.model<IOrganizerTask>('OrganizerTask', OrganizerTaskSchema);
+export const EventFeedback = mongoose.model<IEventFeedback>('EventFeedback', EventFeedbackSchema);
+export const ChatChannel = mongoose.model<IChatChannel>('ChatChannel', ChatChannelSchema);
+export const ChatMessage = mongoose.model<IChatMessage>('ChatMessage', ChatMessageSchema);

@@ -383,6 +383,16 @@ router.post('/rsvp/:eventId/check-in', authMiddleware, async (req: Request, res:
     rsvp.status = 'checked_in';
     rsvp.checkedInAt = new Date();
     await rsvp.save();
+    await Notification.updateOne(
+      { userId: rsvp.userId, eventId, type: 'feedback_request' as const },
+      {
+        $setOnInsert: {
+          message: 'Thanks for attending. Rate the event and share feedback after it ends.',
+          read: false,
+        },
+      },
+      { upsert: true }
+    );
     await logAudit({
       actorUserId: req.userId,
       action: 'rsvp.checked_in',
