@@ -1,5 +1,5 @@
 import { format, isPast, isToday, isTomorrow } from "date-fns";
-import { useState, useEffect, useMemo, memo } from "react";
+import { useState, useEffect, useMemo, useCallback, memo } from "react";
 import { Link } from "react-router-dom";
 import { motion } from "motion/react";
 import { Card } from "@/components/ui/card.tsx";
@@ -37,17 +37,54 @@ import {
   MapPin,
   ExternalLink,
   Share2,
+<<<<<<< HEAD
   MoreHorizontal,
   Link2,
   Building2,
   FileDown,
   Plus,
   Check,
+=======
+  Play,
+>>>>>>> 346808fd0a0988a66c4d5c81e7253a9364dad224
 } from "lucide-react";
 import { toast } from "sonner";
 import { eventsAPI, interactionsAPI, organizationsAPI } from "@/lib/api";
 import { useAuth } from "@/hooks/use-auth.ts";
+<<<<<<< HEAD
 import EventEditDialog from "@/components/EventEditDialog.tsx";
+=======
+import { createFallbackImageDataUrl } from "@/lib/placeholders.ts";
+const YOUTUBE_URL_REGEX = /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/)([\w-]{11})(?:[&?][\w=&%-]*)*/g;
+
+function extractYouTubeLinks(text: string): { id: string; url: string }[] {
+  const matches: { id: string; url: string }[] = [];
+  let match;
+  while ((match = YOUTUBE_URL_REGEX.exec(text)) !== null) {
+    matches.push({ id: match[1], url: match[0] });
+  }
+  YOUTUBE_URL_REGEX.lastIndex = 0;
+  return matches;
+}
+
+// Global cache so titles are fetched once across all cards
+const ytTitleCache = new Map<string, string>();
+
+async function fetchYouTubeTitle(videoId: string): Promise<string> {
+  if (ytTitleCache.has(videoId)) return ytTitleCache.get(videoId)!;
+  try {
+    const res = await fetch(
+      `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`
+    );
+    if (!res.ok) throw new Error("Failed to fetch");
+    const data = await res.json();
+    ytTitleCache.set(videoId, data.title);
+    return data.title;
+  } catch {
+    return videoId;
+  }
+}
+>>>>>>> 346808fd0a0988a66c4d5c81e7253a9364dad224
 
 type EventCardProps = {
   event: any;
@@ -87,6 +124,7 @@ const audienceLabels: Record<string, string> = {
   all: "Everyone",
 };
 
+<<<<<<< HEAD
 function EventCard({
   event,
   isSubscribed = false,
@@ -95,6 +133,11 @@ function EventCard({
 }: EventCardProps) {
   const { isAuthenticated, user } = useAuth();
   const [localEvent, setLocalEvent] = useState(event);
+=======
+function EventCard({ event }: EventCardProps) {
+  const { isAuthenticated } = useAuth();
+  const [playingVideoId, setPlayingVideoId] = useState<string | null>(null);
+>>>>>>> 346808fd0a0988a66c4d5c81e7253a9364dad224
   const [hasUpvoted, setHasUpvoted] = useState(event.hasUpvoted || false);
   const [upvoteCount, setUpvoteCount] = useState(event.upvoteCount || 0);
   const [hasCalendarSave, setHasCalendarSave] = useState(event.hasCalendarSave || false);
@@ -378,6 +421,48 @@ function EventCard({
       (!!org?._id && adminOrgIds.includes(String(org._id)))
     );
 
+  const youtubeLinks = useMemo(() => extractYouTubeLinks(event.description || ""), [event.description]);
+
+  // Fetch YouTube titles for links in description
+  const [ytTitles, setYtTitles] = useState<Record<string, string>>({});
+  useEffect(() => {
+    if (youtubeLinks.length === 0) return;
+    let cancelled = false;
+    Promise.all(
+      youtubeLinks.map(async ({ id, url }) => {
+        const title = await fetchYouTubeTitle(id);
+        return { url, title };
+      })
+    ).then((results) => {
+      if (cancelled) return;
+      const map: Record<string, string> = {};
+      for (const { url, title } of results) map[url] = title;
+      setYtTitles(map);
+    });
+    return () => { cancelled = true; };
+  }, [youtubeLinks]);
+
+  // Replace YouTube URLs in description with their titles
+  const descriptionWithTitles = useMemo(() => {
+    if (youtubeLinks.length === 0 || Object.keys(ytTitles).length === 0)
+      return null;
+    const desc = event.description || "";
+    const parts: (string | { title: string; id: string })[] = [];
+    let lastIndex = 0;
+    YOUTUBE_URL_REGEX.lastIndex = 0;
+    let match;
+    while ((match = YOUTUBE_URL_REGEX.exec(desc)) !== null) {
+      if (match.index > lastIndex) parts.push(desc.slice(lastIndex, match.index));
+      const url = match[0];
+      const id = match[1];
+      parts.push({ title: ytTitles[url] || url, id });
+      lastIndex = match.index + url.length;
+    }
+    YOUTUBE_URL_REGEX.lastIndex = 0;
+    if (lastIndex < desc.length) parts.push(desc.slice(lastIndex));
+    return parts;
+  }, [event.description, youtubeLinks, ytTitles]);
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 14 }}
@@ -385,6 +470,7 @@ function EventCard({
       transition={{ duration: 0.28, ease: "easeOut" }}
       whileHover={{ y: -4 }}
     >
+<<<<<<< HEAD
       <Card
         data-event-id={localEvent._id}
         className="group overflow-hidden rounded-[1.75rem] border border-white/70 bg-[linear-gradient(145deg,rgba(255,255,255,0.97),rgba(248,250,252,0.92))] shadow-[0_18px_50px_rgba(15,23,42,0.08)] ring-1 ring-slate-950/[0.03] backdrop-blur-xl transition-all duration-300 hover:border-primary/20 hover:shadow-[0_26px_70px_rgba(15,23,42,0.14)]"
@@ -533,6 +619,69 @@ function EventCard({
             </div>
           )}
         </div>
+=======
+    <Card
+      data-event-id={event._id}
+      className="group overflow-hidden rounded-[1.75rem] border-border/60 bg-card/80 shadow-[0_18px_60px_rgba(16,24,40,0.06)] backdrop-blur-sm transition-all duration-300 hover:-translate-y-1 hover:border-primary/20 hover:shadow-[0_24px_80px_rgba(88,74,217,0.14)]"
+    >
+      <div className="relative aspect-video w-full overflow-hidden bg-muted">
+        {playingVideoId ? (
+          <iframe
+            className="absolute inset-0 w-full h-full"
+            src={`https://www.youtube.com/embed/${playingVideoId}?autoplay=1`}
+            title="YouTube video player"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allowFullScreen
+          />
+        ) : (
+          <>
+            <img
+              src={youtubeLinks.length > 0
+                ? `https://img.youtube.com/vi/${youtubeLinks[0].id}/hqdefault.jpg`
+                : firstImageUrl}
+              alt={event.title}
+              className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-[1.04]"
+              loading="lazy"
+              decoding="async"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-black/10 to-transparent" />
+
+            {youtubeLinks.length > 0 && (
+              <button
+                onClick={() => setPlayingVideoId(youtubeLinks[0].id)}
+                className="absolute inset-0 flex items-center justify-center z-10 cursor-pointer"
+              >
+                <div className="w-16 h-16 rounded-full bg-red-600 flex items-center justify-center shadow-xl hover:scale-110 transition-transform">
+                  <Play className="w-7 h-7 text-white ml-1" fill="white" />
+                </div>
+              </button>
+            )}
+          </>
+        )}
+
+        {!playingVideoId && (
+          <>
+            <div className="absolute left-4 top-4 flex flex-wrap gap-2 z-20">
+              <Badge className="rounded-full bg-background/90 px-3 text-foreground backdrop-blur-sm">
+                {eventDateLabel}
+              </Badge>
+              <Badge variant="secondary" className="rounded-full bg-primary/85 px-3 text-primary-foreground">
+                {event.mode}
+              </Badge>
+            </div>
+            <div className="absolute bottom-4 left-4 right-4 flex items-end justify-between gap-3 z-20">
+              <div>
+                <p className="text-xs font-medium uppercase tracking-[0.2em] text-white/75">Next up</p>
+                <p className="mt-1 text-lg font-semibold text-white">{eventTimeDisplay}</p>
+              </div>
+              <div className="rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs text-white backdrop-blur-sm">
+                {format(new Date(event.dateTime), "MMM d, yyyy")}
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+>>>>>>> 346808fd0a0988a66c4d5c81e7253a9364dad224
 
         <div className="space-y-0">
           <div className="p-4 sm:p-5">
@@ -722,6 +871,7 @@ function EventCard({
             </div>
           </div>
 
+<<<<<<< HEAD
           <div className="border-y border-slate-200/80 bg-[linear-gradient(180deg,rgba(248,250,252,0.8),rgba(241,245,249,0.72))] px-4 py-3 text-sm text-slate-500 sm:px-5">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex flex-wrap items-center gap-3">
@@ -739,6 +889,28 @@ function EventCard({
               )}
             </div>
           </div>
+=======
+        <div className="space-y-2">
+          <h3 className="text-lg sm:text-xl font-semibold leading-tight" style={{ fontFamily: "var(--font-display)" }}>{event.title}</h3>
+          <p className="text-sm text-muted-foreground line-clamp-3 leading-6">
+            {descriptionWithTitles
+              ? descriptionWithTitles.map((part, i) =>
+                  typeof part === "string" ? (
+                    <span key={i}>{part}</span>
+                  ) : (
+                    <span
+                      key={i}
+                      className="text-primary font-medium cursor-pointer hover:underline"
+                      onClick={() => setPlayingVideoId(part.id)}
+                    >
+                      {part.title}
+                    </span>
+                  )
+                )
+              : event.description}
+          </p>
+        </div>
+>>>>>>> 346808fd0a0988a66c4d5c81e7253a9364dad224
 
           <div className="grid grid-cols-4 gap-1.5 p-2.5 sm:p-3">
             <Button

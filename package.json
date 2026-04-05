@@ -8,9 +8,15 @@
   ],
   "scripts": {
     "install-all": "pnpm -w install",
+<<<<<<< HEAD
     "dev": "pnpm -C frontend run dev",
     "start:frontend": "pnpm -C frontend run dev",
     "start:backend": "pnpm -C backend run dev",
+=======
+    "dev": "pnpm --parallel --filter frontend --filter backend dev",
+    "start:frontend": "pnpm --filter frontend --workspace-root run dev",
+    "start:backend": "pnpm --filter backend --workspace-root run dev",
+>>>>>>> 346808fd0a0988a66c4d5c81e7253a9364dad224
     "build": "pnpm -w -r run build"
   },
   "dependencies": {
