@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { VerificationCode, User, CalendarSave, EventUpvote, EventComment, EventRSVP, EventFeedback } from '../models';
 import { sendVerificationEmail } from '../email';
 import { authMiddleware } from '../middleware';
+import { signPasswordSetupToken, signSessionToken, verifyPasswordSetupToken } from '../auth-token';
 import bcrypt from 'bcryptjs';
 import mongoose from 'mongoose';
 
@@ -97,13 +98,14 @@ router.post('/verify-code', async (req: Request, res: Response) => {
     }
 
     // Find verification code
-    const verificationCode = await VerificationCode.findOne({ email, code });
+    const verificationCode = await VerificationCode.findOne({ email, code, verified: false });
 
     if (!verificationCode) {
       return res.status(400).json({ error: 'Invalid verification code' });
     }
 
     if (new Date() > verificationCode.expiresAt) {
+      await VerificationCode.deleteMany({ email });
       return res.status(400).json({ error: 'Verification code expired' });
     }
 
@@ -138,6 +140,11 @@ router.post('/verify-code', async (req: Request, res: Response) => {
     // Check if user has a password set
     const hasPassword = !!(user as any).password;
 
+    const verificationToken = signPasswordSetupToken({
+      userId: user._id.toString(),
+      email: user.email,
+    });
+
     // If user doesn't have a password, return flag to set password
     if (!hasPassword) {
       return res.json({
@@ -145,17 +152,22 @@ router.post('/verify-code', async (req: Request, res: Response) => {
         message: 'Email verified successfully. Please set your password.',
         needsPassword: true,
         email: user.email,
+        verificationToken,
       });
     }
 
     // If user has password, create auth token and log them in
-    const token = `${user.email}|${user._id}|${Date.now()}`;
+    const token = signSessionToken({
+      userId: user._id.toString(),
+      email: user.email,
+    });
 
     res.json({
       success: true,
       message: 'Email verified successfully',
       needsPassword: false,
       token,
+      verificationToken,
       user: {
         _id: user._id,
         email: user.email,
@@ -179,36 +191,45 @@ router.post('/set-password', async (req: Request, res: Response) => {
     const emailRaw = typeof req.body?.email === 'string' ? req.body.email : '';
     const email = emailRaw.trim().toLowerCase();
     const password = typeof req.body?.password === 'string' ? req.body.password : '';
+    const verificationToken =
+      typeof req.body?.verificationToken === 'string' ? req.body.verificationToken.trim() : '';
 
-    if (!email || !password) {
-      return res.status(400).json({ error: 'Missing email or password' });
+    if (!email || !password || !verificationToken) {
+      return res.status(400).json({ error: 'Missing email, password, or verification token' });
     }
 
     if (password.length < 6) {
       return res.status(400).json({ error: 'Password must be at least 6 characters' });
     }
 
-    // Find user
-    let user = await User.findOne({ email });
-    if (!user) {
+    let decodedVerificationToken;
+    try {
+      decodedVerificationToken = verifyPasswordSetupToken(verificationToken);
+    } catch {
+      return res.status(401).json({ error: 'Verification session expired. Please verify email again.' });
+    }
+
+    if (decodedVerificationToken.email.toLowerCase() !== email) {
+      return res.status(400).json({ error: 'Verification token does not match email' });
+    }
+
+    const user = await User.findById(decodedVerificationToken.userId);
+    if (!user || user.email.toLowerCase() !== email) {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    // Check if email was verified (user must have a verified verification code)
-    const verifiedCode = await VerificationCode.findOne({
-      email,
-      verified: true
-    }).sort({ createdAt: -1 });
-
-    if (!verifiedCode) {
+    // Ensure there was a recent successful email verification for this email.
+    const latestVerifiedCode = await VerificationCode.findOne({ email, verified: true }).sort({ updatedAt: -1 });
+    if (!latestVerifiedCode) {
       return res.status(400).json({ error: 'Email must be verified before setting password' });
     }
 
-    // Check if verification code is still valid (within 1 hour of verification)
-    // Since verification was just marked as true, we check the current time
-    // Allow password setup within 1 hour of verification
-    // Note: We'll allow password setup if code was verified (checked above)
-    // The verification code's verified flag being true is sufficient
+    const latestVerificationAt = new Date((latestVerifiedCode as any).updatedAt || latestVerifiedCode.expiresAt).getTime();
+    const verificationWindowMs = 15 * 60 * 1000;
+    if (Date.now() - latestVerificationAt > verificationWindowMs) {
+      await VerificationCode.deleteMany({ email });
+      return res.status(401).json({ error: 'Verification expired. Please verify email again.' });
+    }
 
     // Hash password
     const salt = await bcrypt.genSalt(10);
@@ -218,8 +239,14 @@ router.post('/set-password', async (req: Request, res: Response) => {
     (user as any).password = hashedPassword;
     await user.save();
 
+    // Consume verification state after successful password update.
+    await VerificationCode.deleteMany({ email });
+
     // Create auth token and log user in
-    const token = `${user.email}|${user._id}|${Date.now()}`;
+    const token = signSessionToken({
+      userId: user._id.toString(),
+      email: user.email,
+    });
 
     res.json({
       success: true,
@@ -463,8 +490,11 @@ router.post('/login', async (req: Request, res: Response) => {
       return res.status(401).json({ error: 'Invalid email or password' });
     }
 
-    // Generate token in format: email|userId|timestamp
-    const token = `${user.email}|${user._id}|${Date.now()}`;
+    // Generate signed session token
+    const token = signSessionToken({
+      userId: user._id.toString(),
+      email: user.email,
+    });
 
     res.json({
       success: true,

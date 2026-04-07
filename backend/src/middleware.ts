@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import * as admin from 'firebase-admin';
 import { User } from './models';
+import { verifySessionToken } from './auth-token';
 
 declare global {
   namespace Express {
@@ -25,35 +26,31 @@ export const authMiddleware = async (req: Request, res: Response, next: NextFunc
 
     const token = authHeader.substring(7);
 
-    // Try our custom token format first (simple JWT)
-    // Token format: email|userId|timestamp
-    if (token.includes('|')) {
-      const parts = token.split('|');
-      if (parts.length >= 2) {
-        const email = parts[0];
-        const userId = parts[1];
-
-        // Verify user exists in database
-        const user = await User.findById(userId);
-        if (!user || user.email !== email) {
-          return res.status(401).json({ error: 'Invalid token' });
-        }
-
-        req.userId = userId;
-        req.user = {
-          uid: user._id.toString(),
-          email: user.email,
-          displayName: user.displayName,
-        };
-
-        return next();
+    try {
+      const decoded = verifySessionToken(token);
+      const user = await User.findById(decoded.userId);
+      if (!user || user.email.toLowerCase() !== decoded.email.toLowerCase()) {
+        return res.status(401).json({ error: 'Invalid token' });
       }
+
+      req.userId = user._id.toString();
+      req.user = {
+        uid: user._id.toString(),
+        email: user.email,
+        displayName: user.displayName,
+      };
+
+      return next();
+    } catch {
+      // Fall through to Firebase token validation.
     }
 
-    // Fallback to Firebase tokens
+    if (admin.apps.length === 0) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
     const decodedToken = await admin.auth().verifyIdToken(token);
 
-    // Find or create user in MongoDB
     let user = await User.findOne({ firebaseUid: decodedToken.uid });
     
     if (!user) {
@@ -87,46 +84,43 @@ export const optionalAuthMiddleware = async (req: Request, res: Response, next: 
     if (authHeader && authHeader.startsWith('Bearer ')) {
       const token = authHeader.substring(7);
 
-      // Try our custom token format first
-      if (token.includes('|')) {
-        const parts = token.split('|');
-        if (parts.length >= 2) {
-          const email = parts[0];
-          const userId = parts[1];
-
-          const user = await User.findById(userId);
-          if (user && user.email === email) {
-            req.userId = userId;
-            req.user = {
-              uid: user._id.toString(),
-              email: user.email,
-              displayName: user.displayName,
-            };
-            return next();
-          }
+      try {
+        const decoded = verifySessionToken(token);
+        const user = await User.findById(decoded.userId);
+        if (user && user.email.toLowerCase() === decoded.email.toLowerCase()) {
+          req.userId = user._id.toString();
+          req.user = {
+            uid: user._id.toString(),
+            email: user.email,
+            displayName: user.displayName,
+          };
+          return next();
         }
+      } catch {
+        // Fall through to Firebase token validation.
       }
 
-      // Fallback to Firebase
-      const decodedToken = await admin.auth().verifyIdToken(token);
+      if (admin.apps.length > 0) {
+        const decodedToken = await admin.auth().verifyIdToken(token);
 
-      let user = await User.findOne({ firebaseUid: decodedToken.uid });
-      
-      if (!user) {
-        user = await User.create({
-          firebaseUid: decodedToken.uid,
-          email: decodedToken.email || '',
-          displayName: decodedToken.name || '',
-          avatar: decodedToken.picture || '',
-        });
+        let user = await User.findOne({ firebaseUid: decodedToken.uid });
+        
+        if (!user) {
+          user = await User.create({
+            firebaseUid: decodedToken.uid,
+            email: decodedToken.email || '',
+            displayName: decodedToken.name || '',
+            avatar: decodedToken.picture || '',
+          });
+        }
+
+        req.user = {
+          uid: decodedToken.uid,
+          email: decodedToken.email,
+          displayName: decodedToken.name,
+        };
+        req.userId = user._id.toString();
       }
-
-      req.user = {
-        uid: decodedToken.uid,
-        email: decodedToken.email,
-        displayName: decodedToken.name,
-      };
-      req.userId = user._id.toString();
     }
 
     next();

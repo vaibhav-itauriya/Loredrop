@@ -18,6 +18,7 @@ export default function EmailVerificationPage() {
   const [verificationCode, setVerificationCode] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [verificationToken, setVerificationToken] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -105,6 +106,12 @@ export default function EmailVerificationPage() {
       }
 
       const data = await response.json();
+      if (typeof data.verificationToken === 'string') {
+        setVerificationToken(data.verificationToken);
+      } else {
+        setVerificationToken('');
+      }
+
       if (data.needsPassword || isResetMode) {
         setSuccess(isResetMode ? 'Identity verified. Set your new password.' : 'Email verified. Please set your password.');
         toast.success(isResetMode ? 'Email verified. Set your new password.' : 'Email verified! Now set your password.');
@@ -180,12 +187,19 @@ export default function EmailVerificationPage() {
 
     setIsLoading(true);
     try {
+      if (!verificationToken) {
+        setError('Verification session expired. Please verify your email again.');
+        setStep('email');
+        return;
+      }
+
       const response = await fetch(`${import.meta.env.VITE_API_URL}/auth/set-password`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           email: normalizeEmail(iitEmail),
           password,
+          verificationToken,
         }),
       });
 
@@ -367,6 +381,7 @@ export default function EmailVerificationPage() {
                 onClick={() => {
                   setStep('email');
                   setVerificationCode('');
+                  setVerificationToken('');
                   setError(null);
                   setSuccess(null);
                 }}
