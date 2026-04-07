@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { ArrowLeft, CalendarDays, Layers } from "lucide-react";
+import { ArrowLeft, CalendarDays, Check, Layers, Loader2, Plus } from "lucide-react";
 import FeedHeader from "../feed/_components/FeedHeader.tsx";
 import EventCard from "../feed/_components/EventCard.tsx";
 import { Badge } from "@/components/ui/badge.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import { Card } from "@/components/ui/card.tsx";
 import { Skeleton } from "@/components/ui/skeleton.tsx";
+import { useAuth } from "@/hooks/use-auth.ts";
 import { eventsAPI, organizationsAPI } from "@/lib/api";
 import { getParentId } from "@/lib/org-hierarchy.ts";
 import { toast } from "sonner";
@@ -19,14 +20,18 @@ type Org = {
   type?: string;
   logo?: string;
   coverImage?: string;
+  followerCount?: number;
   parentOrganizationId?: string | { _id?: string };
 };
 
 export default function OrganizationPage() {
   const { slug } = useParams();
+  const { isAuthenticated } = useAuth();
   const [organization, setOrganization] = useState<Org | null>(null);
   const [allOrganizations, setAllOrganizations] = useState<Org[]>([]);
   const [events, setEvents] = useState<any[]>([]);
+  const [isFollowing, setIsFollowing] = useState(false);
+  const [isFollowActionLoading, setIsFollowActionLoading] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -37,13 +42,21 @@ export default function OrganizationPage() {
       setLoading(true);
       try {
         const org = await organizationsAPI.getBySlug(slug);
-        const allOrgs = await organizationsAPI.list();
-        const orgEvents = await eventsAPI.getByOrganization(org._id);
+        const [allOrgs, orgEvents, subscriptions] = await Promise.all([
+          organizationsAPI.list(),
+          eventsAPI.getByOrganization(org._id),
+          isAuthenticated ? organizationsAPI.getMySubscriptions().catch(() => []) : Promise.resolve([]),
+        ]);
+        const isOrgFollowed =
+          isAuthenticated &&
+          Array.isArray(subscriptions) &&
+          subscriptions.some((item: any) => String(item?._id) === String(org._id));
 
         if (!cancelled) {
           setOrganization(org);
           setAllOrganizations(allOrgs);
           setEvents(Array.isArray(orgEvents) ? orgEvents : []);
+          setIsFollowing(isOrgFollowed);
         }
       } catch (error) {
         if (!cancelled) {
@@ -61,7 +74,50 @@ export default function OrganizationPage() {
     return () => {
       cancelled = true;
     };
-  }, [slug]);
+  }, [slug, isAuthenticated]);
+
+  const handleToggleFollow = async () => {
+    if (!organization?._id) return;
+    if (!isAuthenticated) {
+      toast.error("Please sign in to follow organizations");
+      return;
+    }
+
+    try {
+      setIsFollowActionLoading(true);
+      if (isFollowing) {
+        const response = await organizationsAPI.unsubscribeFromOrganization(organization._id);
+        setIsFollowing(false);
+        setOrganization((prev) =>
+          prev
+            ? {
+                ...prev,
+                followerCount:
+                  typeof response?.followerCount === "number" ? response.followerCount : prev.followerCount,
+              }
+            : prev,
+        );
+        toast.success(`Unfollowed ${organization.name}`);
+      } else {
+        const response = await organizationsAPI.subscribeToOrganization(organization._id);
+        setIsFollowing(true);
+        setOrganization((prev) =>
+          prev
+            ? {
+                ...prev,
+                followerCount:
+                  typeof response?.followerCount === "number" ? response.followerCount : prev.followerCount,
+              }
+            : prev,
+        );
+        toast.success(`Following ${organization.name}`);
+      }
+    } catch (error: any) {
+      toast.error(error?.message || "Failed to update follow status");
+    } finally {
+      setIsFollowActionLoading(false);
+    }
+  };
 
   const now = new Date();
   const upcomingEvents = useMemo(
@@ -149,6 +205,31 @@ export default function OrganizationPage() {
                     </Link>
                   )}
                 </div>
+              </div>
+              <div className="sm:ml-auto">
+                <Button
+                  onClick={handleToggleFollow}
+                  disabled={isFollowActionLoading}
+                  className="rounded-full px-5"
+                  variant={isFollowing ? "secondary" : "default"}
+                >
+                  {isFollowActionLoading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Updating...
+                    </>
+                  ) : isFollowing ? (
+                    <>
+                      <Check className="mr-2 h-4 w-4" />
+                      Following
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="mr-2 h-4 w-4" />
+                      Follow
+                    </>
+                  )}
+                </Button>
               </div>
             </div>
 

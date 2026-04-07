@@ -91,7 +91,7 @@ export default function OrganizationFilter({
                 <div className="min-w-0 flex-1 text-left">
                   <p className="truncate text-sm font-medium">{org.name}</p>
                   <p className="text-xs text-muted-foreground">
-                    {selectedId === org._id ? "Currently viewing" : "Tap to filter feed"}
+                    {selectedId === org._id ? "Currently viewing" : "Open organization page"}
                   </p>
                 </div>
                 {selectedId === org._id ? (

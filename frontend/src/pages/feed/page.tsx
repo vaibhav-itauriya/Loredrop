@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { motion } from "motion/react";
 import FeedHeader from "./_components/FeedHeader.tsx";
 import OrganizationFilter from "./_components/OrganizationFilter.tsx";
@@ -26,6 +26,7 @@ const FEED_STATE_KEY = "feed-page-state";
 
 export default function FeedPage() {
   const { isAuthenticated } = useAuth();
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const scrollToEventId = searchParams.get("event");
   const [hasRestoredState, setHasRestoredState] = useState(false);
@@ -374,6 +375,18 @@ export default function FeedPage() {
     setFilters({});
   }, []);
 
+  const handleOpenOrganizationPage = useCallback(
+    (organizationId: string) => {
+      const organization = organizations.find((item) => String(item._id) === String(organizationId));
+      if (!organization?.slug) {
+        toast.error("Organization page is unavailable right now");
+        return;
+      }
+      navigate(`/organizations/${organization.slug}`);
+    },
+    [navigate, organizations],
+  );
+
   return (
     <div className="relative min-h-screen overflow-hidden bg-[radial-gradient(circle_at_top_left,rgba(252,211,77,0.18),transparent_24%),radial-gradient(circle_at_top_right,rgba(59,130,246,0.18),transparent_28%),radial-gradient(circle_at_50%_18%,rgba(45,212,191,0.1),transparent_24%),linear-gradient(180deg,#fcfcfd_0%,#f6f8fb_48%,#eef2f7_100%)]">
       <motion.div
@@ -490,10 +503,7 @@ export default function FeedPage() {
                 selectedId={isForYouSelected ? selectedOrgId : null}
                 isAuthenticated={isAuthenticated}
                 subscribedOrganizations={subscribedOrganizations}
-                onSelect={(id) => {
-                  setFeedMode("forYou");
-                  setSelectedOrgId(id);
-                }}
+                onSelect={handleOpenOrganizationPage}
               />
             </motion.div>
           </aside>
