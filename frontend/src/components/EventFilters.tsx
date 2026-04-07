@@ -1,10 +1,13 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button.tsx";
 import { Badge } from "@/components/ui/badge.tsx";
-import { X, Filter, ChevronDown, Calendar, Monitor, Users } from "lucide-react";
+import { Input } from "@/components/ui/input.tsx";
+import { X, Filter, Calendar, Monitor, Users, Search } from "lucide-react";
 import {
   Sheet,
   SheetContent,
+  SheetDescription,
+  SheetFooter,
   SheetHeader,
   SheetTitle,
   SheetTrigger,
@@ -48,6 +51,19 @@ const AUDIENCE_OPTIONS = [
   { value: "staff", label: "Staff" },
 ] as const;
 
+function getActiveFilterCount(filters: FilterOptions) {
+  return [
+    filters.dateRange && filters.dateRange !== "all" ? 1 : 0,
+    filters.eventMode?.length ?? 0,
+    filters.audience?.length ?? 0,
+    filters.organizations?.length ?? 0,
+  ].reduce((a, b) => a + b, 0);
+}
+
+function areFiltersEqual(a: FilterOptions, b: FilterOptions) {
+  return JSON.stringify(a ?? {}) === JSON.stringify(b ?? {});
+}
+
 export function EventFilters({
   onFilterChange,
   currentFilters = {},
@@ -55,17 +71,26 @@ export function EventFilters({
   variant = "inline",
 }: EventFiltersProps) {
   const [filters, setFilters] = useState<FilterOptions>(currentFilters);
+  const [draftFilters, setDraftFilters] = useState<FilterOptions>(currentFilters);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [organizationQuery, setOrganizationQuery] = useState("");
 
   useEffect(() => {
     setFilters(currentFilters);
-  }, [currentFilters]);
+    if (!sheetOpen) {
+      setDraftFilters(currentFilters);
+    }
+  }, [currentFilters, sheetOpen]);
+
+  const updateAppliedFilters = (newFilters: FilterOptions) => {
+    setFilters(newFilters);
+    onFilterChange(newFilters);
+  };
 
   const handleDateChange = (range: string) => {
     const newValue = range === "all" || filters.dateRange === range ? undefined : (range as FilterOptions["dateRange"]);
     const newFilters = { ...filters, dateRange: newValue };
-    setFilters(newFilters);
-    onFilterChange(newFilters);
+    updateAppliedFilters(newFilters);
   };
 
   const handleModeToggle = (mode: "online" | "offline" | "hybrid") => {
@@ -77,8 +102,7 @@ export function EventFilters({
       ...filters,
       eventMode: newModes.length > 0 ? newModes : undefined,
     };
-    setFilters(newFilters);
-    onFilterChange(newFilters);
+    updateAppliedFilters(newFilters);
   };
 
   const handleAudienceToggle = (
@@ -92,42 +116,126 @@ export function EventFilters({
       ...filters,
       audience: newAudience.length > 0 ? newAudience : undefined,
     };
-    setFilters(newFilters);
-    onFilterChange(newFilters);
+    updateAppliedFilters(newFilters);
   };
 
-  const handleOrgToggle = (orgId: string) => {
-    const orgs = filters.organizations || [];
-    const newOrgs = orgs.includes(orgId)
-      ? orgs.filter((o) => o !== orgId)
-      : [...orgs, orgId];
-    const newFilters = {
-      ...filters,
-      organizations: newOrgs.length > 0 ? newOrgs : undefined,
-    };
-    setFilters(newFilters);
-    onFilterChange(newFilters);
+  const handleDraftDateChange = (range: string) => {
+    setDraftFilters((prev) => {
+      const newValue =
+        range === "all" || prev.dateRange === range
+          ? undefined
+          : (range as FilterOptions["dateRange"]);
+      return { ...prev, dateRange: newValue };
+    });
   };
 
-  const handleClearAll = () => {
-    const emptyFilters: FilterOptions = {};
-    setFilters(emptyFilters);
-    onFilterChange(emptyFilters);
+  const handleDraftModeToggle = (mode: "online" | "offline" | "hybrid") => {
+    setDraftFilters((prev) => {
+      const modes = prev.eventMode || [];
+      const newModes = modes.includes(mode)
+        ? modes.filter((m) => m !== mode)
+        : [...modes, mode];
+      return {
+        ...prev,
+        eventMode: newModes.length > 0 ? newModes : undefined,
+      };
+    });
+  };
+
+  const handleDraftAudienceToggle = (
+    aud: "ug" | "pg" | "phd" | "faculty" | "staff"
+  ) => {
+    setDraftFilters((prev) => {
+      const audience = prev.audience || [];
+      const newAudience = audience.includes(aud)
+        ? audience.filter((a) => a !== aud)
+        : [...audience, aud];
+      return {
+        ...prev,
+        audience: newAudience.length > 0 ? newAudience : undefined,
+      };
+    });
+  };
+
+  const handleDraftOrgToggle = (orgId: string) => {
+    setDraftFilters((prev) => {
+      const orgs = prev.organizations || [];
+      const newOrgs = orgs.includes(orgId)
+        ? orgs.filter((o) => o !== orgId)
+        : [...orgs, orgId];
+      return {
+        ...prev,
+        organizations: newOrgs.length > 0 ? newOrgs : undefined,
+      };
+    });
+  };
+
+  const handleApplyDraftFilters = () => {
+    updateAppliedFilters(draftFilters);
     setSheetOpen(false);
   };
 
-  const hasActiveFilters =
-    (filters.dateRange && filters.dateRange !== "all") ||
-    (filters.eventMode?.length ?? 0) > 0 ||
-    (filters.audience?.length ?? 0) > 0 ||
-    (filters.organizations?.length ?? 0) > 0;
+  const handleCancelDraftFilters = () => {
+    setDraftFilters(filters);
+    setOrganizationQuery("");
+    setSheetOpen(false);
+  };
 
-  const activeFilterCount = [
-    filters.dateRange && filters.dateRange !== "all" ? 1 : 0,
-    filters.eventMode?.length ?? 0,
-    filters.audience?.length ?? 0,
-    filters.organizations?.length ?? 0,
-  ].reduce((a, b) => a + b, 0);
+  const handleClearDraft = () => {
+    const emptyFilters: FilterOptions = {};
+    setDraftFilters(emptyFilters);
+    setOrganizationQuery("");
+  };
+
+  const handleClearApplied = () => {
+    const emptyFilters: FilterOptions = {};
+    updateAppliedFilters(emptyFilters);
+    setDraftFilters(emptyFilters);
+    setOrganizationQuery("");
+    setSheetOpen(false);
+  };
+
+  const handleSheetOpenChange = (open: boolean) => {
+    if (open) {
+      setDraftFilters(filters);
+      setOrganizationQuery("");
+    }
+    setSheetOpen(open);
+  };
+
+  const hasActiveFilters = getActiveFilterCount(filters) > 0;
+  const activeFilterCount = getActiveFilterCount(filters);
+  const draftFilterCount = getActiveFilterCount(draftFilters);
+  const hasDraftChanges = !areFiltersEqual(filters, draftFilters);
+
+  const organizationNameById = useMemo(
+    () => new Map(organizations.map((org) => [org._id, org.name])),
+    [organizations]
+  );
+
+  const activeFilterSummary = useMemo(() => {
+    const labels: string[] = [];
+    const dateLabel = DATE_OPTIONS.find((opt) => opt.value === filters.dateRange)?.label;
+    if (dateLabel && filters.dateRange !== "all") labels.push(dateLabel);
+
+    (filters.eventMode || []).forEach((mode) => {
+      const match = MODE_OPTIONS.find((opt) => opt.value === mode);
+      if (match) labels.push(match.label);
+    });
+
+    (filters.audience || []).forEach((aud) => {
+      const match = AUDIENCE_OPTIONS.find((opt) => opt.value === aud);
+      if (match) labels.push(match.label);
+    });
+
+    (filters.organizations || []).forEach((orgId) => {
+      labels.push(organizationNameById.get(orgId) || "Organization");
+    });
+
+    if (labels.length === 0) return "All events";
+    if (labels.length <= 2) return labels.join(", ");
+    return `${labels.slice(0, 2).join(", ")} +${labels.length - 2}`;
+  }, [filters, organizationNameById]);
 
   const FilterChip = ({
     active,
@@ -156,44 +264,88 @@ export function EventFilters({
     </button>
   );
 
+  const renderFilterSheet = (trigger: React.ReactNode) => (
+    <Sheet open={sheetOpen} onOpenChange={handleSheetOpenChange}>
+      <SheetTrigger asChild>{trigger}</SheetTrigger>
+      <SheetContent side="left" className="w-full gap-0 overflow-y-auto p-0 sm:w-[430px]">
+        <SheetHeader className="sticky top-0 z-10 border-b border-border/60 bg-background/95 px-4 py-4 backdrop-blur-sm">
+          <div className="pr-8">
+            <SheetTitle className="text-lg">More Filters</SheetTitle>
+            <SheetDescription className="mt-1 text-xs">
+              {draftFilterCount > 0
+                ? `${draftFilterCount} selected in this view`
+                : "Select filters to narrow down events"}
+            </SheetDescription>
+          </div>
+        </SheetHeader>
+        <FilterFormContent
+          filters={draftFilters}
+          organizations={organizations}
+          organizationQuery={organizationQuery}
+          onOrganizationQueryChange={setOrganizationQuery}
+          onDateChange={handleDraftDateChange}
+          onModeToggle={handleDraftModeToggle}
+          onAudienceToggle={handleDraftAudienceToggle}
+          onOrgToggle={handleDraftOrgToggle}
+        />
+        <SheetFooter className="sticky bottom-0 mt-0 gap-3 border-t border-border/60 bg-background/95 px-4 py-4 backdrop-blur-sm">
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              className="flex-1"
+              onClick={handleCancelDraftFilters}
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="flex-1"
+              onClick={handleClearDraft}
+              disabled={draftFilterCount === 0}
+            >
+              Clear
+            </Button>
+            <Button
+              size="sm"
+              className="flex-1"
+              onClick={handleApplyDraftFilters}
+              disabled={!hasDraftChanges}
+            >
+              Apply{draftFilterCount > 0 ? ` (${draftFilterCount})` : ""}
+            </Button>
+          </div>
+          {hasActiveFilters && (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="w-full justify-center text-muted-foreground hover:text-foreground"
+              onClick={handleClearApplied}
+            >
+              <X className="mr-1 h-4 w-4" />
+              Clear applied filters
+            </Button>
+          )}
+        </SheetFooter>
+      </SheetContent>
+    </Sheet>
+  );
+
   if (variant === "sheet") {
-    return (
-      <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-        <SheetTrigger asChild>
-          <Button variant="outline" size="sm" className="relative">
-            <Filter className="w-4 h-4 mr-2" />
-            Filters
-            {activeFilterCount > 0 && (
-              <Badge
-                variant="secondary"
-                className="ml-1.5 h-5 min-w-5 px-1.5 rounded-full text-xs"
-              >
-                {activeFilterCount}
-              </Badge>
-            )}
-          </Button>
-        </SheetTrigger>
-        <SheetContent side="left" className="w-full overflow-y-auto p-0 sm:w-96">
-          <SheetHeader className="sticky top-0 z-10 border-b border-border/60 bg-background/95 px-4 py-4 backdrop-blur-sm">
-            <div className="flex items-center justify-between pr-10">
-              <SheetTitle>Filter Events</SheetTitle>
-              {hasActiveFilters && (
-                <Button size="sm" variant="ghost" onClick={handleClearAll}>
-                  Clear all
-                </Button>
-              )}
-            </div>
-          </SheetHeader>
-          <FilterFormContent
-            filters={filters}
-            organizations={organizations}
-            onDateChange={handleDateChange}
-            onModeToggle={handleModeToggle}
-            onAudienceToggle={handleAudienceToggle}
-            onOrgToggle={handleOrgToggle}
-          />
-        </SheetContent>
-      </Sheet>
+    return renderFilterSheet(
+      <Button variant="outline" size="sm" className="relative">
+        <Filter className="w-4 h-4 mr-2" />
+        Filters
+        {activeFilterCount > 0 && (
+          <Badge
+            variant="secondary"
+            className="ml-1.5 h-5 min-w-5 px-1.5 rounded-full text-xs"
+          >
+            {activeFilterCount}
+          </Badge>
+        )}
+      </Button>
     );
   }
 
@@ -231,9 +383,8 @@ export function EventFilters({
         ))}
       </div>
 
-      {/* More filters - Sheet */}
-      <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-        <SheetTrigger asChild>
+      <div className="flex items-center gap-2">
+        {renderFilterSheet(
           <Button
             variant="outline"
             size="sm"
@@ -243,7 +394,7 @@ export function EventFilters({
             )}
           >
             <Filter className="w-4 h-4 mr-1.5" />
-            More
+            More Filters
             {activeFilterCount > 0 && (
               <Badge
                 variant="secondary"
@@ -253,29 +404,11 @@ export function EventFilters({
               </Badge>
             )}
           </Button>
-        </SheetTrigger>
-        <SheetContent side="left" className="w-full overflow-y-auto p-0 sm:w-96">
-          <SheetHeader className="sticky top-0 z-10 border-b border-border/60 bg-background/95 px-4 py-4 backdrop-blur-sm">
-            <div className="flex items-center justify-between pr-10">
-              <SheetTitle>Filter Events</SheetTitle>
-              {hasActiveFilters && (
-                <Button size="sm" variant="ghost" onClick={handleClearAll}>
-                  <X className="w-4 h-4 mr-1" />
-                  Clear all
-                </Button>
-              )}
-            </div>
-          </SheetHeader>
-          <FilterFormContent
-            filters={filters}
-            organizations={organizations}
-            onDateChange={handleDateChange}
-            onModeToggle={handleModeToggle}
-            onAudienceToggle={handleAudienceToggle}
-            onOrgToggle={handleOrgToggle}
-          />
-        </SheetContent>
-      </Sheet>
+        )}
+        <p className="hidden text-xs text-muted-foreground md:block">
+          {activeFilterSummary}
+        </p>
+      </div>
     </div>
   );
 }
@@ -283,6 +416,8 @@ export function EventFilters({
 function FilterFormContent({
   filters,
   organizations,
+  organizationQuery,
+  onOrganizationQueryChange,
   onDateChange,
   onModeToggle,
   onAudienceToggle,
@@ -290,14 +425,43 @@ function FilterFormContent({
 }: {
   filters: FilterOptions;
   organizations: { _id: string; name: string }[];
+  organizationQuery: string;
+  onOrganizationQueryChange: (value: string) => void;
   onDateChange: (range: string) => void;
   onModeToggle: (mode: "online" | "offline" | "hybrid") => void;
   onAudienceToggle: (aud: "ug" | "pg" | "phd" | "faculty" | "staff") => void;
   onOrgToggle: (orgId: string) => void;
 }) {
+  const normalizedOrgQuery = organizationQuery.trim().toLowerCase();
+  const visibleOrganizations = useMemo(() => {
+    if (!normalizedOrgQuery) return organizations;
+    return organizations.filter((org) =>
+      org.name.toLowerCase().includes(normalizedOrgQuery)
+    );
+  }, [normalizedOrgQuery, organizations]);
+
+  const grouped = useMemo(
+    () => groupOrganizations(visibleOrganizations as OrganizationLike[]),
+    [visibleOrganizations]
+  );
+
+  const selectedOrgCount = filters.organizations?.length ?? 0;
+
+  const renderOrgButton = (org: OrganizationLike, className?: string) => (
+    <Button
+      key={org._id}
+      variant={filters.organizations?.includes(org._id) ? "default" : "outline"}
+      size="sm"
+      onClick={() => onOrgToggle(org._id)}
+      className={cn("w-full justify-start", className)}
+    >
+      {org.name}
+    </Button>
+  );
+
   return (
-    <div className="space-y-6 px-4 py-4">
-      <div>
+    <div className="space-y-4 px-4 py-4">
+      <div className="rounded-2xl border border-border/60 bg-muted/20 p-4">
         <h3 className="font-semibold text-sm mb-3 flex items-center gap-2">
           <Calendar className="w-4 h-4 text-muted-foreground" />
           When
@@ -317,7 +481,7 @@ function FilterFormContent({
         </div>
       </div>
 
-      <div>
+      <div className="rounded-2xl border border-border/60 bg-muted/20 p-4">
         <h3 className="font-semibold text-sm mb-3 flex items-center gap-2">
           <Monitor className="w-4 h-4 text-muted-foreground" />
           Event Type
@@ -337,7 +501,7 @@ function FilterFormContent({
         </div>
       </div>
 
-      <div>
+      <div className="rounded-2xl border border-border/60 bg-muted/20 p-4">
         <h3 className="font-semibold text-sm mb-3 flex items-center gap-2">
           <Users className="w-4 h-4 text-muted-foreground" />
           Audience
@@ -357,72 +521,76 @@ function FilterFormContent({
       </div>
 
       {organizations.length > 0 && (
-        <div>
-          <h3 className="font-semibold text-sm mb-3">Organizations</h3>
-          <div className="space-y-2 max-h-48 overflow-y-auto pr-2">
-            {(() => {
-              const { councils, festivals, others, clubsByCouncil, orphanClubs } = groupOrganizations(organizations as OrganizationLike[]);
-              const renderOrgButton = (org: OrganizationLike, className?: string) => (
-                <Button
-                  key={org._id}
-                  variant={
-                    filters.organizations?.includes(org._id) ? "default" : "outline"
-                  }
-                  size="sm"
-                  onClick={() => onOrgToggle(org._id)}
-                  className={cn("w-full justify-start", className)}
-                >
-                  {org.name}
-                </Button>
-              );
+        <div className="rounded-2xl border border-border/60 bg-muted/20 p-4">
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <h3 className="font-semibold text-sm">Organizations</h3>
+            {selectedOrgCount > 0 && (
+              <Badge variant="secondary" className="rounded-full text-xs">
+                {selectedOrgCount} selected
+              </Badge>
+            )}
+          </div>
+          <div className="relative mb-3">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={organizationQuery}
+              onChange={(event) => onOrganizationQueryChange(event.target.value)}
+              placeholder="Search organizations"
+              className="h-8 pl-8"
+            />
+          </div>
 
-              return (
-                <div className="space-y-3">
-                  {councils.length > 0 && (
-                    <div className="space-y-2">
-                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                        Councils
-                      </p>
-                      {councils.map((c) => (
-                        <div key={c._id} className="space-y-1">
-                          {renderOrgButton(c)}
-                          {(clubsByCouncil.get(c._id) || []).map((club) =>
-                            renderOrgButton(club, "ml-4 text-xs")
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
+          <div className="space-y-2 max-h-56 overflow-y-auto pr-2">
+            {visibleOrganizations.length === 0 ? (
+              <p className="rounded-md border border-dashed border-border px-3 py-3 text-xs text-muted-foreground">
+                No organizations match this search.
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {grouped.councils.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                      Councils
+                    </p>
+                    {grouped.councils.map((c) => (
+                      <div key={c._id} className="space-y-1">
+                        {renderOrgButton(c)}
+                        {(grouped.clubsByCouncil.get(c._id) || []).map((club) =>
+                          renderOrgButton(club, "ml-4 text-xs")
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
 
-                  {orphanClubs.length > 0 && (
-                    <div className="space-y-2">
-                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                        Clubs
-                      </p>
-                      {orphanClubs.map((c) => renderOrgButton(c))}
-                    </div>
-                  )}
+                {grouped.orphanClubs.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                      Clubs
+                    </p>
+                    {grouped.orphanClubs.map((c) => renderOrgButton(c))}
+                  </div>
+                )}
 
-                  {festivals.length > 0 && (
-                    <div className="space-y-2">
-                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                        Festivals
-                      </p>
-                      {festivals.map((f) => renderOrgButton(f))}
-                    </div>
-                  )}
+                {grouped.festivals.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                      Festivals
+                    </p>
+                    {grouped.festivals.map((f) => renderOrgButton(f))}
+                  </div>
+                )}
 
-                  {others.length > 0 && (
-                    <div className="space-y-2">
-                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                        Others
-                      </p>
-                      {others.map((o) => renderOrgButton(o))}
-                    </div>
-                  )}
-                </div>
-              );
-            })()}
+                {grouped.others.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                      Others
+                    </p>
+                    {grouped.others.map((o) => renderOrgButton(o))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}
