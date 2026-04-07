@@ -70,8 +70,10 @@ async function fetchWithAuth(url: string, options: FetchOptions = {}) {
 
     if (!response.ok) {
       let errorMessage = `API error: ${response.status}`;
+      let errorBody: any = null;
       try {
         const body = await response.json();
+        errorBody = body;
         if (body?.error && typeof body.error === 'string') {
           errorMessage = body.error;
         }
@@ -79,7 +81,10 @@ async function fetchWithAuth(url: string, options: FetchOptions = {}) {
         // Response body wasn't JSON, use status message
       }
       console.error('API error:', response.status, errorMessage);
-      throw new Error(errorMessage);
+      const err = new Error(errorMessage) as Error & { status?: number; body?: any };
+      err.status = response.status;
+      err.body = errorBody;
+      throw err;
     }
 
     const data = await response.json();
@@ -396,6 +401,16 @@ export const organizerAPI = {
       method: 'PATCH',
       body: JSON.stringify(data),
     });
+  },
+
+  deleteTask: (taskId: string) => {
+    return fetchWithAuth(`${API_BASE_URL}/organizer/tasks/${taskId}`, {
+      method: 'DELETE',
+    });
+  },
+
+  getOrganizationMembers: (organizationId: string) => {
+    return fetchWithAuth(`${API_BASE_URL}/organizer/organization/${organizationId}/members`);
   },
 
   getAnalytics: (organizationId: string) => {

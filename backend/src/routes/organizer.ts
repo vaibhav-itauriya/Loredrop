@@ -72,6 +72,40 @@ router.get('/organization/:orgId/tasks', authMiddleware, async (req: Request, re
   }
 });
 
+router.get('/organization/:orgId/members', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const permission = await ensureOrgAccess(req.userId!, req.params.orgId, 'manage_tasks');
+    if (!permission.allowed) {
+      return res.status(403).json({ error: 'Not allowed to view organization members' });
+    }
+
+    const members = await OrganizationMember.find({
+      organizationId: new mongoose.Types.ObjectId(req.params.orgId),
+    })
+      .populate('userId', 'displayName email avatar')
+      .sort({ role: 1, joinedAt: 1 });
+
+    const normalized = members.map((member: any) => ({
+      _id: String(member._id),
+      role: member.role,
+      joinedAt: member.joinedAt,
+      user: member.userId
+        ? {
+            _id: String(member.userId._id),
+            displayName: member.userId.displayName || '',
+            email: member.userId.email || '',
+            avatar: member.userId.avatar || '',
+          }
+        : null,
+    }));
+
+    res.json(normalized);
+  } catch (error) {
+    console.error('Failed to fetch organization members:', error);
+    res.status(500).json({ error: 'Failed to fetch organization members' });
+  }
+});
+
 router.post('/organization/:orgId/tasks', authMiddleware, async (req: Request, res: Response) => {
   try {
     const permission = await ensureOrgAccess(req.userId!, req.params.orgId, 'manage_tasks');
@@ -163,6 +197,26 @@ router.patch('/tasks/:taskId', authMiddleware, async (req: Request, res: Respons
   } catch (error) {
     console.error('Failed to update organizer task:', error);
     res.status(500).json({ error: 'Failed to update organizer task' });
+  }
+});
+
+router.delete('/tasks/:taskId', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const task = await OrganizerTask.findById(req.params.taskId);
+    if (!task) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+
+    const permission = await ensureOrgAccess(req.userId!, String(task.organizationId), 'manage_tasks');
+    if (!permission.allowed) {
+      return res.status(403).json({ error: 'Not allowed to delete organizer tasks' });
+    }
+
+    await OrganizerTask.deleteOne({ _id: task._id });
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Failed to delete organizer task:', error);
+    res.status(500).json({ error: 'Failed to delete organizer task' });
   }
 });
 
@@ -371,9 +425,31 @@ router.post('/organization/:orgId/channels', authMiddleware, async (req: Request
       return res.status(400).json({ error: 'Channel name is required' });
     }
 
+    const organizationId = new mongoose.Types.ObjectId(req.params.orgId);
+    let resolvedEventId: mongoose.Types.ObjectId | undefined;
+    if (type === 'event') {
+      if (!eventId) {
+        return res.status(400).json({ error: 'eventId is required for event channels' });
+      }
+
+      const event = await Event.findById(eventId).select('_id organizationId');
+      if (!event || String(event.organizationId) !== String(req.params.orgId)) {
+        return res.status(400).json({ error: 'Invalid event for this organization' });
+      }
+      resolvedEventId = new mongoose.Types.ObjectId(String(event._id));
+
+      const existingEventChannel = await ChatChannel.findOne({
+        eventId: resolvedEventId,
+        type: 'event',
+      }).select('_id');
+      if (existingEventChannel) {
+        return res.status(409).json({ error: 'An event channel already exists for this event' });
+      }
+    }
+
     const channel = await ChatChannel.create({
-      organizationId: new mongoose.Types.ObjectId(req.params.orgId),
-      eventId: eventId ? new mongoose.Types.ObjectId(eventId) : undefined,
+      organizationId,
+      eventId: resolvedEventId,
       type,
       name: String(name).trim(),
       createdByUserId: new mongoose.Types.ObjectId(req.userId),

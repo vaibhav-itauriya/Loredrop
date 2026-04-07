@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, type ChangeEvent } from 'react';
+import { useState, useEffect, useMemo, useRef, type ChangeEvent } from 'react';
 import { useAuth } from '@/hooks/use-auth';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button.tsx';
@@ -6,7 +6,26 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input.tsx';
 import { Textarea } from '@/components/ui/textarea.tsx';
 import { Label } from '@/components/ui/label.tsx';
-import { Plus, ArrowLeft, Calendar, Users, X, UserPlus, AlertCircle, Check, XCircle, Shield, BarChart3, KanbanSquare, MessageSquare } from 'lucide-react';
+import {
+  Plus,
+  ArrowLeft,
+  Calendar,
+  Users,
+  X,
+  UserPlus,
+  AlertCircle,
+  Check,
+  XCircle,
+  Shield,
+  BarChart3,
+  KanbanSquare,
+  MessageSquare,
+  Clock3,
+  SendHorizontal,
+  Search,
+  RefreshCcw,
+  Trash2,
+} from 'lucide-react';
 import { eventsAPI, organizationsAPI, authAPI, organizationRequestsAPI, organizerAPI } from '@/lib/api';
 import { Alert, AlertDescription } from '@/components/ui/alert.tsx';
 import { buildOrganizationOptions } from '@/lib/org-hierarchy.ts';
@@ -17,6 +36,7 @@ interface Organization {
   slug: string;
   description: string;
   logo?: string;
+  role?: 'owner' | 'admin' | 'moderator' | 'member';
 }
 
 interface PendingRequest {
@@ -56,6 +76,7 @@ interface OrganizerTask {
   description?: string;
   status: 'todo' | 'in_progress' | 'done';
   category: string;
+  assignedToUserId?: string | { _id: string; displayName?: string; email?: string };
   budgetAmount?: number;
   inventoryItems?: string[];
   dueDate?: string;
@@ -92,6 +113,8 @@ interface OrganizerChannel {
   _id: string;
   name: string;
   type: 'organization' | 'event';
+  eventId?: string;
+  updatedAt?: string;
 }
 
 interface OrganizerMessage {
@@ -104,6 +127,27 @@ interface OrganizerMessage {
     isAlumni?: boolean;
   };
 }
+
+interface OrganizerMember {
+  _id: string;
+  role: 'owner' | 'admin' | 'moderator' | 'member';
+  joinedAt: string;
+  user: {
+    _id: string;
+    displayName?: string;
+    email?: string;
+    avatar?: string;
+  } | null;
+}
+
+const EVENT_AUDIENCE_OPTIONS = [
+  { value: 'all', label: 'Everyone' },
+  { value: 'ug', label: 'UG' },
+  { value: 'pg', label: 'PG' },
+  { value: 'phd', label: 'PhD' },
+  { value: 'faculty', label: 'Faculty' },
+  { value: 'staff', label: 'Staff' },
+] as const;
 
 export default function AdminPage() {
   const { isAuthenticated } = useAuth();
@@ -136,12 +180,14 @@ export default function AdminPage() {
     title: '',
     description: '',
     location: '',
+    mode: 'offline' as 'online' | 'offline' | 'hybrid',
+    registrationLink: '',
     dateTime: '',
     endDateTime: '',
     capacity: '',
     imageUrl: '',
     tags: '',
-    audience: 'all' as const,
+    audience: ['all'] as Array<'all' | 'ug' | 'pg' | 'phd' | 'faculty' | 'staff'>,
     isRecurring: false,
     recurrenceFrequency: 'weekly' as 'weekly' | 'monthly',
     recurrenceInterval: '1',
@@ -152,15 +198,23 @@ export default function AdminPage() {
   const [timeConflictEvent, setTimeConflictEvent] = useState<any | null>(null);
   const [organizerTasks, setOrganizerTasks] = useState<OrganizerTask[]>([]);
   const [organizerAnalytics, setOrganizerAnalytics] = useState<OrganizerAnalytics | null>(null);
+  const [organizerMembers, setOrganizerMembers] = useState<OrganizerMember[]>([]);
+  const [analyticsError, setAnalyticsError] = useState<string | null>(null);
   const [loadingOrganizerData, setLoadingOrganizerData] = useState(false);
   const [channels, setChannels] = useState<OrganizerChannel[]>([]);
   const [selectedChannelId, setSelectedChannelId] = useState<string>('');
   const [messages, setMessages] = useState<OrganizerMessage[]>([]);
   const [loadingMessages, setLoadingMessages] = useState(false);
+  const [taskSearch, setTaskSearch] = useState('');
+  const [taskCategoryFilter, setTaskCategoryFilter] = useState('all');
+  const [channelSearch, setChannelSearch] = useState('');
+  const [currentUserEmail, setCurrentUserEmail] = useState('');
+  const [refreshingWorkspace, setRefreshingWorkspace] = useState(false);
   const [taskForm, setTaskForm] = useState({
     title: '',
     description: '',
     category: 'planning',
+    assignedToUserId: '',
     budgetAmount: '',
     inventoryItems: '',
     dueDate: '',
@@ -171,6 +225,7 @@ export default function AdminPage() {
     type: 'organization' as 'organization' | 'event',
     eventId: '',
   });
+  const messageBottomRef = useRef<HTMLDivElement | null>(null);
 
   const liveConflicts = useMemo(() => {
     if (!eventForm.dateTime || !events.length) return [];
@@ -192,6 +247,31 @@ export default function AdminPage() {
     });
   }, [eventForm.dateTime, eventForm.endDateTime, events]);
 
+  const filteredTasks = useMemo(() => {
+    const normalizedQuery = taskSearch.trim().toLowerCase();
+    return organizerTasks.filter((task) => {
+      const matchesQuery =
+        !normalizedQuery ||
+        task.title.toLowerCase().includes(normalizedQuery) ||
+        (task.description || '').toLowerCase().includes(normalizedQuery);
+      const matchesCategory = taskCategoryFilter === 'all' || task.category === taskCategoryFilter;
+      return matchesQuery && matchesCategory;
+    });
+  }, [organizerTasks, taskCategoryFilter, taskSearch]);
+
+  const filteredChannels = useMemo(() => {
+    const normalizedQuery = channelSearch.trim().toLowerCase();
+    if (!normalizedQuery) return channels;
+    return channels.filter((channel) => channel.name.toLowerCase().includes(normalizedQuery));
+  }, [channelSearch, channels]);
+
+  const selectedChannel = useMemo(
+    () => channels.find((channel) => channel._id === selectedChannelId) || null,
+    [channels, selectedChannelId],
+  );
+
+  const canViewOrganizerAnalytics = selectedOrg?.role === 'owner' || selectedOrg?.role === 'admin' || selectedOrg?.role === 'moderator';
+
   useEffect(() => {
     if (!isAuthenticated) {
       setCheckingMembership(false);
@@ -208,6 +288,7 @@ export default function AdminPage() {
         organizationsAPI.getUserMemberships(),
       ]);
       setIsMainAdmin(!!(profileRes as any).isMainAdmin);
+      setCurrentUserEmail((profileRes as any)?.email || '');
       setIsOrgMember(membershipData.isMember);
       if (membershipData.isMember && membershipData.organizations.length > 0) {
         const orgs = membershipData.organizations.map((org: any) => ({
@@ -216,6 +297,7 @@ export default function AdminPage() {
           slug: org.slug,
           description: org.description,
           logo: org.logo,
+          role: org.role,
         }));
         setOrganizations(orgs);
         setSelectedOrg(orgs[0]);
@@ -283,7 +365,30 @@ export default function AdminPage() {
     } else {
       setMessages([]);
     }
+    setMessageDraft('');
   }, [selectedChannelId]);
+
+  useEffect(() => {
+    if (!selectedChannelId) return;
+    const timer = setInterval(() => {
+      fetchChannelMessages(selectedChannelId);
+    }, 8000);
+    return () => clearInterval(timer);
+  }, [selectedChannelId]);
+
+  useEffect(() => {
+    if (!selectedOrg?._id) return;
+    const timer = setInterval(() => {
+      fetchOrganizerWorkspace(selectedOrg._id);
+    }, 30000);
+    return () => clearInterval(timer);
+  }, [selectedOrg?._id, selectedChannelId]);
+
+  useEffect(() => {
+    if (messageBottomRef.current) {
+      messageBottomRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [messages]);
 
   const handleApproveRequest = async (requestId: string) => {
     try {
@@ -316,21 +421,11 @@ export default function AdminPage() {
 
   const fetchEvents = async (orgId: string) => {
     try {
-      const token = localStorage.getItem('authToken');
-      const response = await fetch(
-        `${import.meta.env.VITE_API_URL}/events/by-organization/${orgId}`,
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-          },
-        }
-      );
-      if (response.ok) {
-        const data = await response.json();
-        setEvents(data);
-      }
+      const data = await eventsAPI.getByOrganization(orgId);
+      setEvents(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error('Failed to fetch events:', err);
+      setEvents([]);
     }
   };
 
@@ -353,10 +448,12 @@ export default function AdminPage() {
     if (!selectedOrg || !taskForm.title.trim()) return;
 
     try {
+      setError(null);
       await organizerAPI.createTask(selectedOrg._id, {
         title: taskForm.title.trim(),
         description: taskForm.description.trim(),
         category: taskForm.category,
+        assignedToUserId: taskForm.assignedToUserId || undefined,
         budgetAmount: taskForm.budgetAmount ? Number(taskForm.budgetAmount) : undefined,
         inventoryItems: taskForm.inventoryItems.split(',').map((item) => item.trim()).filter(Boolean),
         dueDate: taskForm.dueDate || undefined,
@@ -365,6 +462,7 @@ export default function AdminPage() {
         title: '',
         description: '',
         category: 'planning',
+        assignedToUserId: '',
         budgetAmount: '',
         inventoryItems: '',
         dueDate: '',
@@ -377,22 +475,26 @@ export default function AdminPage() {
     }
   };
 
-  const handleAdvanceTask = async (task: OrganizerTask) => {
-    const nextStatus =
-      task.status === 'todo' ? 'in_progress' : task.status === 'in_progress' ? 'done' : 'todo';
+  const handleDeleteTask = async (taskId: string) => {
+    if (!selectedOrg) return;
     try {
-      await organizerAPI.updateTask(task._id, { status: nextStatus });
-      if (selectedOrg) {
-        fetchOrganizerWorkspace(selectedOrg._id);
-      }
+      await organizerAPI.deleteTask(taskId);
+      setOrganizerTasks((prev) => prev.filter((task) => task._id !== taskId));
+      setSuccessMessage('Task removed.');
+      setTimeout(() => setSuccessMessage(null), 2500);
     } catch (err: any) {
-      setError(err?.message || 'Failed to update task');
+      setError(err?.message || 'Failed to delete task');
     }
   };
 
   const handleCreateChannel = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedOrg || !channelForm.name.trim()) return;
+    setError(null);
+    if (channelForm.type === 'event' && !channelForm.eventId) {
+      setError('Select an event to create an event channel.');
+      return;
+    }
     try {
       await organizerAPI.createChannel(selectedOrg._id, {
         name: channelForm.name.trim(),
@@ -412,6 +514,7 @@ export default function AdminPage() {
     e.preventDefault();
     if (!selectedChannelId || !messageDraft.trim()) return;
     try {
+      setError(null);
       await organizerAPI.postMessage(selectedChannelId, messageDraft.trim());
       setMessageDraft('');
       fetchChannelMessages(selectedChannelId);
@@ -437,13 +540,31 @@ export default function AdminPage() {
   const fetchOrganizerWorkspace = async (orgId: string) => {
     try {
       setLoadingOrganizerData(true);
-      const [tasks, analytics, orgChannels] = await Promise.all([
-        organizerAPI.getTasks(orgId).catch(() => []),
-        organizerAPI.getAnalytics(orgId).catch(() => null),
-        organizerAPI.getChannels(orgId).catch(() => []),
+      setRefreshingWorkspace(true);
+      setAnalyticsError(null);
+      const [tasksResult, analyticsResult, channelsResult, membersResult] = await Promise.allSettled([
+        organizerAPI.getTasks(orgId),
+        organizerAPI.getAnalytics(orgId),
+        organizerAPI.getChannels(orgId),
+        organizerAPI.getOrganizationMembers(orgId),
       ]);
+
+      const tasks = tasksResult.status === 'fulfilled' ? tasksResult.value : [];
+      const analytics = analyticsResult.status === 'fulfilled' ? analyticsResult.value : null;
+      const orgChannels = channelsResult.status === 'fulfilled' ? channelsResult.value : [];
+      const members = membersResult.status === 'fulfilled' ? membersResult.value : [];
+
+      if (analyticsResult.status === 'rejected') {
+        const message =
+          analyticsResult.reason instanceof Error
+            ? analyticsResult.reason.message
+            : 'Analytics are unavailable for your current role.';
+        setAnalyticsError(message);
+      }
+
       setOrganizerTasks(Array.isArray(tasks) ? tasks : []);
       setOrganizerAnalytics(analytics);
+      setOrganizerMembers(Array.isArray(members) ? members : []);
       const nextChannels = Array.isArray(orgChannels) ? orgChannels : [];
       setChannels(nextChannels);
       if (nextChannels.length === 0) {
@@ -453,8 +574,13 @@ export default function AdminPage() {
       }
     } catch (err) {
       console.error('Failed to load organizer workspace:', err);
+      setOrganizerTasks([]);
+      setOrganizerAnalytics(null);
+      setChannels([]);
+      setOrganizerMembers([]);
     } finally {
       setLoadingOrganizerData(false);
+      setRefreshingWorkspace(false);
     }
   };
 
@@ -523,6 +649,33 @@ export default function AdminPage() {
     if (fileInput) fileInput.value = '';
   };
 
+  const toggleAudience = (audience: 'all' | 'ug' | 'pg' | 'phd' | 'faculty' | 'staff') => {
+    setEventForm((prev) => {
+      if (audience === 'all') {
+        return { ...prev, audience: ['all'] };
+      }
+
+      const withoutAll = prev.audience.filter((item) => item !== 'all');
+      const next = withoutAll.includes(audience)
+        ? withoutAll.filter((item) => item !== audience)
+        : [...withoutAll, audience];
+
+      return {
+        ...prev,
+        audience: next.length > 0 ? next : ['all'],
+      };
+    });
+  };
+
+  const handleTaskStatusChange = async (task: OrganizerTask, status: 'todo' | 'in_progress' | 'done') => {
+    try {
+      await organizerAPI.updateTask(task._id, { status });
+      setOrganizerTasks((prev) => prev.map((item) => (item._id === task._id ? { ...item, status } : item)));
+    } catch (err: any) {
+      setError(err?.message || 'Failed to update task status');
+    }
+  };
+
   const submitEvent = async (allowTimeConflict: boolean) => {
     if (!selectedOrg) return;
 
@@ -530,8 +683,21 @@ export default function AdminPage() {
       setLoading(true);
       setError(null);
 
-      const token = localStorage.getItem('authToken');
       const eventImage = uploadedImageDataUrl || eventForm.imageUrl;
+      const parsedCapacity = eventForm.capacity ? parseInt(eventForm.capacity, 10) : undefined;
+      if (eventForm.endDateTime && new Date(eventForm.endDateTime) <= new Date(eventForm.dateTime)) {
+        setError('End time must be after start time.');
+        return;
+      }
+      if (parsedCapacity !== undefined && (Number.isNaN(parsedCapacity) || parsedCapacity <= 0)) {
+        setError('Capacity must be a positive number.');
+        return;
+      }
+      if (eventForm.mode === 'online' && !eventForm.registrationLink.trim()) {
+        setError('Online events should include a registration or meeting link.');
+        return;
+      }
+
       const recurrencePayload = eventForm.isRecurring
         ? {
             frequency: eventForm.recurrenceFrequency,
@@ -539,47 +705,56 @@ export default function AdminPage() {
             count: Number(eventForm.recurrenceCount) || 1,
           }
         : undefined;
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/events`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          title: eventForm.title,
-          description: eventForm.description,
-          location: eventForm.location,
-          dateTime: new Date(eventForm.dateTime).toISOString(),
-          endDateTime: eventForm.endDateTime ? new Date(eventForm.endDateTime).toISOString() : undefined,
-          capacity: eventForm.capacity ? parseInt(eventForm.capacity, 10) : undefined,
-          organizationId: selectedOrg._id,
-          media: eventImage ? [{ type: 'image', url: eventImage }] : [],
-          tags: eventForm.tags.split(',').map(t => t.trim()).filter(t => t),
-          audience: eventForm.audience,
-          isPublished: true,
-          allowTimeConflict,
-          recurrence: recurrencePayload,
-        }),
+
+      await eventsAPI.createEvent({
+        title: eventForm.title,
+        description: eventForm.description,
+        location: eventForm.location,
+        mode: eventForm.mode,
+        registrationLink: eventForm.registrationLink.trim() || undefined,
+        dateTime: new Date(eventForm.dateTime).toISOString(),
+        endDateTime: eventForm.endDateTime ? new Date(eventForm.endDateTime).toISOString() : undefined,
+        capacity: parsedCapacity,
+        organizationId: selectedOrg._id,
+        media: eventImage ? [{ type: 'image', url: eventImage }] : [],
+        tags: eventForm.tags.split(',').map(t => t.trim()).filter(t => t),
+        audience: eventForm.audience,
+        isPublished: true,
+        allowTimeConflict,
+        recurrence: recurrencePayload,
       });
 
-      if (response.ok) {
-        setSuccessMessage('Event created successfully!');
-        setTimeConflictEvent(null);
-        setUploadedImageDataUrl('');
-        setEventForm({ title: '', description: '', location: '', dateTime: '', endDateTime: '', capacity: '', imageUrl: '', tags: '', audience: 'all', isRecurring: false, recurrenceFrequency: 'weekly', recurrenceInterval: '1', recurrenceCount: '1' });
-        fetchEvents(selectedOrg._id);
-        fetchOrganizerWorkspace(selectedOrg._id);
-        setTimeout(() => setSuccessMessage(null), 3000);
+      setSuccessMessage('Event created successfully!');
+      setTimeConflictEvent(null);
+      setUploadedImageDataUrl('');
+      setEventForm({
+        title: '',
+        description: '',
+        location: '',
+        mode: 'offline',
+        registrationLink: '',
+        dateTime: '',
+        endDateTime: '',
+        capacity: '',
+        imageUrl: '',
+        tags: '',
+        audience: ['all'],
+        isRecurring: false,
+        recurrenceFrequency: 'weekly',
+        recurrenceInterval: '1',
+        recurrenceCount: '1',
+      });
+      fetchEvents(selectedOrg._id);
+      fetchOrganizerWorkspace(selectedOrg._id);
+      setTimeout(() => setSuccessMessage(null), 3000);
+    } catch (err: any) {
+      const status = err?.status;
+      const errorBody = err?.body;
+      if (status === 409 && errorBody?.code === 'EVENT_TIME_CONFLICT') {
+        setTimeConflictEvent(liveConflicts[0] || errorBody?.conflictingDates?.[0] || { title: 'Another event' });
       } else {
-        const errorData = await response.json().catch(() => ({}));
-        if (response.status === 409 && errorData?.code === 'EVENT_TIME_CONFLICT') {
-          setTimeConflictEvent(liveConflicts[0] || errorData?.conflictingDates?.[0] || { title: 'Another event' });
-        } else {
-          setError(errorData.error || 'Failed to create event');
-        }
+        setError(err?.message || 'An error occurred while creating the event');
       }
-    } catch (err) {
-      setError('An error occurred while creating the event');
       console.error(err);
     } finally {
       setLoading(false);
@@ -933,259 +1108,289 @@ export default function AdminPage() {
                   <Plus className="w-5 h-5" />
                   Create New Event
                 </CardTitle>
-                <CardDescription>Add a new event to your organization's feed</CardDescription>
+                <CardDescription>
+                  Structured event builder with timing checks, audience targeting, and media support.
+                </CardDescription>
               </CardHeader>
-              <CardContent>
+              <CardContent className="space-y-4">
                 {!selectedOrg ? (
                   <Alert>
                     <AlertDescription>Please select an organization to create events</AlertDescription>
                   </Alert>
                 ) : (
                   <form onSubmit={handleCreateEvent} className="space-y-4">
-                  <div>
-                    <Label htmlFor="title">Event Title</Label>
-                    <Input
-                      id="title"
-                      placeholder="e.g., Campus Tech Meetup"
-                      value={eventForm.title}
-                      onChange={(e) => setEventForm({ ...eventForm, title: e.target.value })}
-                      required
-                    />
-                  </div>
-
-                  <div>
-                    <Label htmlFor="description">Description</Label>
-                    <Textarea
-                      id="description"
-                      placeholder="Describe your event..."
-                      value={eventForm.description}
-                      onChange={(e) => setEventForm({ ...eventForm, description: e.target.value })}
-                      required
-                      className="min-h-32"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="eventImageFile">Event Image</Label>
-                    <Input
-                      id="eventImageFile"
-                      type="file"
-                      accept="image/*"
-                      onChange={handleEventImageFileChange}
-                    />
-                    <p className="text-xs text-muted-foreground">You can upload from device or paste an image URL below.</p>
-                    <Input
-                      id="imageUrl"
-                      placeholder="https://example.com/image.jpg"
-                      value={eventForm.imageUrl}
-                      onChange={(e) => {
-                        setEventForm({ ...eventForm, imageUrl: e.target.value });
-                        if (e.target.value) setUploadedImageDataUrl('');
-                      }}
-                    />
-                    {(uploadedImageDataUrl || eventForm.imageUrl) && (
-                      <div className="mt-2 relative inline-block">
-                        <img src={uploadedImageDataUrl || eventForm.imageUrl} alt="Event preview" className="h-20 w-20 object-cover rounded-lg" />
-                        <button
-                          type="button"
-                          onClick={clearEventImage}
-                          className="absolute -top-2 -right-2 bg-destructive text-white rounded-full p-1 hover:bg-destructive/90"
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
-                      </div>
-                    )}
-                  </div>
-
-                  <div>
-                    <Label htmlFor="tags">Tags (comma-separated)</Label>
-                    <Input
-                      id="tags"
-                      placeholder="e.g., tech, conference, networking"
-                      value={eventForm.tags}
-                      onChange={(e) => setEventForm({ ...eventForm, tags: e.target.value })}
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <Label htmlFor="location">Location</Label>
-                      <Input
-                        id="location"
-                        placeholder="e.g., Building A, Room 101"
-                        value={eventForm.location}
-                        onChange={(e) => setEventForm({ ...eventForm, location: e.target.value })}
-                        required
-                      />
-                    </div>
-
-                    <div>
-                      <Label htmlFor="capacity">Capacity</Label>
-                      <Input
-                        id="capacity"
-                        type="number"
-                        placeholder="e.g., 100"
-                        value={eventForm.capacity}
-                        onChange={(e) => setEventForm({ ...eventForm, capacity: e.target.value })}
-                        required
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <Label htmlFor="audience">Target Audience</Label>
-                    <select
-                      id="audience"
-                      value={eventForm.audience}
-                      onChange={(e) => setEventForm({ ...eventForm, audience: e.target.value as any })}
-                      className="w-full px-3 py-2 border border-input rounded-md bg-background"
-                    >
-                      <option value="all">Everyone</option>
-                      <option value="ug">Undergraduates</option>
-                      <option value="pg">Postgraduates</option>
-                      <option value="phd">PhD Students</option>
-                      <option value="faculty">Faculty</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <Label htmlFor="dateTime">Date & Time</Label>
-                    <Input
-                      id="dateTime"
-                      type="datetime-local"
-                      value={eventForm.dateTime}
-                      onChange={(e) => {
-                        setEventForm({ ...eventForm, dateTime: e.target.value });
-                        setTimeConflictEvent(null);
-                      }}
-                      required
-                    />
-                  </div>
-
-                  <div>
-                    <Label htmlFor="endDateTime">End Time</Label>
-                    <Input
-                      id="endDateTime"
-                      type="datetime-local"
-                      value={eventForm.endDateTime}
-                      onChange={(e) => {
-                        setEventForm({ ...eventForm, endDateTime: e.target.value });
-                        setTimeConflictEvent(null);
-                      }}
-                    />
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Optional. If left empty, a 1 hour duration is used for clash checking.
-                    </p>
-                  </div>
-
-                  <div className="rounded-md border p-3 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <Label htmlFor="isRecurring">Recurring Event</Label>
-                      <input
-                        id="isRecurring"
-                        type="checkbox"
-                        checked={eventForm.isRecurring}
-                        onChange={(e) => setEventForm({ ...eventForm, isRecurring: e.target.checked })}
-                      />
-                    </div>
-                    {eventForm.isRecurring && (
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                      <div className="space-y-4 rounded-lg border p-4">
                         <div>
-                          <Label htmlFor="recurrenceFrequency">Frequency</Label>
-                          <select
-                            id="recurrenceFrequency"
-                            value={eventForm.recurrenceFrequency}
-                            onChange={(e) => setEventForm({ ...eventForm, recurrenceFrequency: e.target.value as 'weekly' | 'monthly' })}
-                            className="w-full px-3 py-2 border border-input rounded-md bg-background"
-                          >
-                            <option value="weekly">Weekly</option>
-                            <option value="monthly">Monthly</option>
-                          </select>
-                        </div>
-                        <div>
-                          <Label htmlFor="recurrenceInterval">Every</Label>
+                          <Label htmlFor="title">Event Title</Label>
                           <Input
-                            id="recurrenceInterval"
-                            type="number"
-                            min={1}
-                            value={eventForm.recurrenceInterval}
-                            onChange={(e) => setEventForm({ ...eventForm, recurrenceInterval: e.target.value })}
+                            id="title"
+                            placeholder="e.g., Campus Tech Meetup"
+                            value={eventForm.title}
+                            onChange={(e) => setEventForm({ ...eventForm, title: e.target.value })}
+                            required
                           />
                         </div>
+
                         <div>
-                          <Label htmlFor="recurrenceCount">Occurrences</Label>
-                          <Input
-                            id="recurrenceCount"
-                            type="number"
-                            min={1}
-                            max={52}
-                            value={eventForm.recurrenceCount}
-                            onChange={(e) => setEventForm({ ...eventForm, recurrenceCount: e.target.value })}
+                          <Label htmlFor="description">Description</Label>
+                          <Textarea
+                            id="description"
+                            placeholder="Describe your event..."
+                            value={eventForm.description}
+                            onChange={(e) => setEventForm({ ...eventForm, description: e.target.value })}
+                            required
+                            className="min-h-32"
                           />
                         </div>
-                      </div>
-                    )}
-                  </div>
 
-                  {liveConflicts.length > 0 && (
-                    <Alert className="border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30">
-                      <AlertDescription>
+                        <div>
+                          <Label htmlFor="tags">Tags (comma-separated)</Label>
+                          <Input
+                            id="tags"
+                            placeholder="e.g., tech, conference, networking"
+                            value={eventForm.tags}
+                            onChange={(e) => setEventForm({ ...eventForm, tags: e.target.value })}
+                          />
+                        </div>
+
                         <div className="space-y-2">
-                          <p className="font-medium">Possible clashes for this time slot</p>
-                          <div className="space-y-2">
-                            {liveConflicts.slice(0, 3).map((conflict) => (
-                              <div key={conflict._id} className="rounded-md border border-amber-200/60 bg-background/70 p-2 text-sm dark:border-amber-900">
-                                <p className="font-medium">{conflict.title}</p>
-                                <p className="text-xs text-muted-foreground">
-                                  {new Date(conflict.dateTime).toLocaleString()}
-                                  {conflict.endDateTime ? ` to ${new Date(conflict.endDateTime).toLocaleString()}` : ''}
-                                </p>
-                              </div>
-                            ))}
+                          <Label htmlFor="eventImageFile">Event Image</Label>
+                          <Input
+                            id="eventImageFile"
+                            type="file"
+                            accept="image/*"
+                            onChange={handleEventImageFileChange}
+                          />
+                          <Input
+                            id="imageUrl"
+                            placeholder="Paste image URL (optional)"
+                            value={eventForm.imageUrl}
+                            onChange={(e) => {
+                              setEventForm({ ...eventForm, imageUrl: e.target.value });
+                              if (e.target.value) setUploadedImageDataUrl('');
+                            }}
+                          />
+                          {(uploadedImageDataUrl || eventForm.imageUrl) && (
+                            <div className="mt-2 relative inline-block">
+                              <img src={uploadedImageDataUrl || eventForm.imageUrl} alt="Event preview" className="h-20 w-20 object-cover rounded-lg" />
+                              <button
+                                type="button"
+                                onClick={clearEventImage}
+                                className="absolute -top-2 -right-2 bg-destructive text-white rounded-full p-1 hover:bg-destructive/90"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="space-y-4 rounded-lg border p-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div>
+                            <Label htmlFor="location">Location / Venue</Label>
+                            <Input
+                              id="location"
+                              placeholder="e.g., Lecture Hall Complex"
+                              value={eventForm.location}
+                              onChange={(e) => setEventForm({ ...eventForm, location: e.target.value })}
+                              required
+                            />
+                          </div>
+                          <div>
+                            <Label htmlFor="mode">Mode</Label>
+                            <select
+                              id="mode"
+                              value={eventForm.mode}
+                              onChange={(e) => setEventForm({ ...eventForm, mode: e.target.value as 'online' | 'offline' | 'hybrid' })}
+                              className="w-full px-3 py-2 border border-input rounded-md bg-background"
+                            >
+                              <option value="offline">Offline</option>
+                              <option value="online">Online</option>
+                              <option value="hybrid">Hybrid</option>
+                            </select>
                           </div>
                         </div>
-                      </AlertDescription>
-                    </Alert>
-                  )}
 
-                  {timeConflictEvent && (
-                    <Alert className="border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30">
-                      <AlertDescription>
-                        <div className="space-y-3">
-                          <p>
-                            An event already overlaps with this time slot
-                            {timeConflictEvent?.title ? ` ("${timeConflictEvent.title}")` : ''}.
-                          </p>
-                          <div className="flex flex-wrap gap-2">
-                            <Button
-                              type="button"
-                              onClick={() => submitEvent(true)}
-                              disabled={loading}
-                            >
-                              Keep Same Timing
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              onClick={() => {
+                        <div>
+                          <Label htmlFor="registrationLink">Registration / Meeting Link</Label>
+                          <Input
+                            id="registrationLink"
+                            type="url"
+                            placeholder="https://..."
+                            value={eventForm.registrationLink}
+                            onChange={(e) => setEventForm({ ...eventForm, registrationLink: e.target.value })}
+                          />
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div>
+                            <Label htmlFor="dateTime">Start Time</Label>
+                            <Input
+                              id="dateTime"
+                              type="datetime-local"
+                              value={eventForm.dateTime}
+                              onChange={(e) => {
+                                setEventForm({ ...eventForm, dateTime: e.target.value });
                                 setTimeConflictEvent(null);
-                                const input = document.getElementById('dateTime') as HTMLInputElement | null;
-                                input?.focus();
                               }}
-                              disabled={loading}
-                            >
-                              Change Time
-                            </Button>
+                              required
+                            />
+                          </div>
+                          <div>
+                            <Label htmlFor="endDateTime">End Time (optional)</Label>
+                            <Input
+                              id="endDateTime"
+                              type="datetime-local"
+                              value={eventForm.endDateTime}
+                              onChange={(e) => {
+                                setEventForm({ ...eventForm, endDateTime: e.target.value });
+                                setTimeConflictEvent(null);
+                              }}
+                            />
                           </div>
                         </div>
-                      </AlertDescription>
-                    </Alert>
-                  )}
 
-                  <Button type="submit" disabled={loading} className="w-full">
-                    {loading ? 'Creating...' : 'Create Event'}
-                  </Button>
-                </form>
+                        <div>
+                          <Label htmlFor="capacity">Capacity (optional)</Label>
+                          <Input
+                            id="capacity"
+                            type="number"
+                            min={1}
+                            placeholder="e.g., 100"
+                            value={eventForm.capacity}
+                            onChange={(e) => setEventForm({ ...eventForm, capacity: e.target.value })}
+                          />
+                        </div>
+
+                        <div className="rounded-md border p-3 space-y-3">
+                          <div className="flex items-center justify-between">
+                            <Label htmlFor="isRecurring">Recurring Event</Label>
+                            <input
+                              id="isRecurring"
+                              type="checkbox"
+                              checked={eventForm.isRecurring}
+                              onChange={(e) => setEventForm({ ...eventForm, isRecurring: e.target.checked })}
+                            />
+                          </div>
+                          {eventForm.isRecurring && (
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                              <div>
+                                <Label htmlFor="recurrenceFrequency">Frequency</Label>
+                                <select
+                                  id="recurrenceFrequency"
+                                  value={eventForm.recurrenceFrequency}
+                                  onChange={(e) => setEventForm({ ...eventForm, recurrenceFrequency: e.target.value as 'weekly' | 'monthly' })}
+                                  className="w-full px-3 py-2 border border-input rounded-md bg-background"
+                                >
+                                  <option value="weekly">Weekly</option>
+                                  <option value="monthly">Monthly</option>
+                                </select>
+                              </div>
+                              <div>
+                                <Label htmlFor="recurrenceInterval">Every</Label>
+                                <Input
+                                  id="recurrenceInterval"
+                                  type="number"
+                                  min={1}
+                                  value={eventForm.recurrenceInterval}
+                                  onChange={(e) => setEventForm({ ...eventForm, recurrenceInterval: e.target.value })}
+                                />
+                              </div>
+                              <div>
+                                <Label htmlFor="recurrenceCount">Occurrences</Label>
+                                <Input
+                                  id="recurrenceCount"
+                                  type="number"
+                                  min={1}
+                                  max={52}
+                                  value={eventForm.recurrenceCount}
+                                  onChange={(e) => setEventForm({ ...eventForm, recurrenceCount: e.target.value })}
+                                />
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="rounded-md border p-4 space-y-3">
+                      <Label>Target Audience</Label>
+                      <div className="flex flex-wrap gap-2">
+                        {EVENT_AUDIENCE_OPTIONS.map((option) => (
+                          <Button
+                            key={option.value}
+                            type="button"
+                            size="sm"
+                            variant={eventForm.audience.includes(option.value) ? 'default' : 'outline'}
+                            onClick={() => toggleAudience(option.value)}
+                          >
+                            {option.label}
+                          </Button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {liveConflicts.length > 0 && (
+                      <Alert className="border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30">
+                        <AlertDescription>
+                          <div className="space-y-2">
+                            <p className="font-medium">Possible clashes for this time slot</p>
+                            <div className="space-y-2">
+                              {liveConflicts.slice(0, 3).map((conflict) => (
+                                <div key={conflict._id} className="rounded-md border border-amber-200/60 bg-background/70 p-2 text-sm dark:border-amber-900">
+                                  <p className="font-medium">{conflict.title}</p>
+                                  <p className="text-xs text-muted-foreground">
+                                    {new Date(conflict.dateTime).toLocaleString()}
+                                    {conflict.endDateTime ? ` to ${new Date(conflict.endDateTime).toLocaleString()}` : ''}
+                                  </p>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </AlertDescription>
+                      </Alert>
+                    )}
+
+                    {timeConflictEvent && (
+                      <Alert className="border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30">
+                        <AlertDescription>
+                          <div className="space-y-3">
+                            <p>
+                              An event already overlaps with this time slot
+                              {timeConflictEvent?.title ? ` ("${timeConflictEvent.title}")` : ''}.
+                            </p>
+                            <div className="flex flex-wrap gap-2">
+                              <Button
+                                type="button"
+                                onClick={() => submitEvent(true)}
+                                disabled={loading}
+                              >
+                                Keep Same Timing
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => {
+                                  setTimeConflictEvent(null);
+                                  const input = document.getElementById('dateTime') as HTMLInputElement | null;
+                                  input?.focus();
+                                }}
+                                disabled={loading}
+                              >
+                                Change Time
+                              </Button>
+                            </div>
+                          </div>
+                        </AlertDescription>
+                      </Alert>
+                    )}
+
+                    <Button type="submit" disabled={loading} className="w-full">
+                      {loading ? 'Creating...' : 'Create Event'}
+                    </Button>
+                  </form>
                 )}
               </CardContent>
             </Card>
@@ -1213,10 +1418,13 @@ export default function AdminPage() {
                             <Calendar className="w-3 h-3" />
                             {new Date(event.dateTime).toLocaleDateString()}
                           </span>
-                          <span className="flex items-center gap-1">
-                            <Users className="w-3 h-3" />
-                            {event.capacity} capacity
-                          </span>
+                          {event.capacity ? (
+                            <span className="flex items-center gap-1">
+                              <Users className="w-3 h-3" />
+                              {event.capacity} capacity
+                            </span>
+                          ) : null}
+                          <span className="capitalize">{event.mode || 'offline'}</span>
                         </div>
                       </div>
                     ))}
@@ -1232,10 +1440,10 @@ export default function AdminPage() {
                     <KanbanSquare className="w-5 h-5" />
                     Organizer Task Board
                   </CardTitle>
-                  <CardDescription>Track planning, budgets, and inventory before events go live</CardDescription>
+                  <CardDescription>Assignable planning tasks with filters and status controls.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <form onSubmit={handleCreateTask} className="space-y-3">
+                  <form onSubmit={handleCreateTask} className="space-y-3 rounded-lg border p-4">
                     <Input
                       placeholder="Task title"
                       value={taskForm.title}
@@ -1246,7 +1454,7 @@ export default function AdminPage() {
                       value={taskForm.description}
                       onChange={(e) => setTaskForm({ ...taskForm, description: e.target.value })}
                     />
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <select
                         value={taskForm.category}
                         onChange={(e) => setTaskForm({ ...taskForm, category: e.target.value })}
@@ -1259,6 +1467,22 @@ export default function AdminPage() {
                         <option value="logistics">Logistics</option>
                         <option value="other">Other</option>
                       </select>
+                      <select
+                        value={taskForm.assignedToUserId}
+                        onChange={(e) => setTaskForm({ ...taskForm, assignedToUserId: e.target.value })}
+                        className="w-full px-3 py-2 border border-input rounded-md bg-background"
+                      >
+                        <option value="">Unassigned</option>
+                        {organizerMembers
+                          .filter((member) => !!member.user?._id)
+                          .map((member) => (
+                            <option key={member._id} value={member.user!._id}>
+                              {(member.user?.displayName || member.user?.email || 'Member') + ` (${member.role})`}
+                            </option>
+                          ))}
+                      </select>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                       <Input
                         type="number"
                         placeholder="Budget"
@@ -1270,51 +1494,121 @@ export default function AdminPage() {
                         value={taskForm.dueDate}
                         onChange={(e) => setTaskForm({ ...taskForm, dueDate: e.target.value })}
                       />
+                      <Input
+                        placeholder="Inventory items"
+                        value={taskForm.inventoryItems}
+                        onChange={(e) => setTaskForm({ ...taskForm, inventoryItems: e.target.value })}
+                      />
                     </div>
-                    <Input
-                      placeholder="Inventory items (comma-separated)"
-                      value={taskForm.inventoryItems}
-                      onChange={(e) => setTaskForm({ ...taskForm, inventoryItems: e.target.value })}
-                    />
                     <Button type="submit" className="w-full">Add Organizer Task</Button>
                   </form>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-[1fr_180px_auto] gap-2">
+                    <div className="relative">
+                      <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        value={taskSearch}
+                        onChange={(e) => setTaskSearch(e.target.value)}
+                        placeholder="Search tasks"
+                        className="pl-8"
+                      />
+                    </div>
+                    <select
+                      value={taskCategoryFilter}
+                      onChange={(e) => setTaskCategoryFilter(e.target.value)}
+                      className="w-full px-3 py-2 border border-input rounded-md bg-background"
+                    >
+                      <option value="all">All categories</option>
+                      <option value="planning">Planning</option>
+                      <option value="budget">Budget</option>
+                      <option value="inventory">Inventory</option>
+                      <option value="marketing">Marketing</option>
+                      <option value="logistics">Logistics</option>
+                      <option value="other">Other</option>
+                    </select>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => selectedOrg && fetchOrganizerWorkspace(selectedOrg._id)}
+                      disabled={refreshingWorkspace}
+                    >
+                      <RefreshCcw className="w-4 h-4 mr-2" />
+                      Refresh
+                    </Button>
+                  </div>
 
                   {loadingOrganizerData ? (
                     <p className="text-sm text-muted-foreground">Loading task board...</p>
                   ) : (
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      {(['todo', 'in_progress', 'done'] as const).map((status) => (
-                        <div key={status} className="rounded-lg border p-3 space-y-3">
-                          <p className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-                            {status.replace('_', ' ')}
-                          </p>
-                          {organizerTasks.filter((task) => task.status === status).length === 0 ? (
-                            <p className="text-xs text-muted-foreground">No tasks here yet.</p>
-                          ) : (
-                            organizerTasks
-                              .filter((task) => task.status === status)
-                              .map((task) => (
-                                <button
-                                  key={task._id}
-                                  type="button"
-                                  onClick={() => handleAdvanceTask(task)}
-                                  className="w-full rounded-lg border bg-muted/40 p-3 text-left hover:bg-muted"
-                                >
-                                  <p className="font-medium">{task.title}</p>
-                                  <p className="text-xs text-muted-foreground mt-1">{task.category}</p>
-                                  {task.budgetAmount ? (
-                                    <p className="text-xs text-muted-foreground mt-1">Budget: Rs. {task.budgetAmount}</p>
-                                  ) : null}
-                                  {task.inventoryItems?.length ? (
-                                    <p className="text-xs text-muted-foreground mt-1">
-                                      Inventory: {task.inventoryItems.join(', ')}
-                                    </p>
-                                  ) : null}
-                                </button>
-                              ))
-                          )}
-                        </div>
-                      ))}
+                      {(['todo', 'in_progress', 'done'] as const).map((status) => {
+                        const tasksByStatus = filteredTasks.filter((task) => task.status === status);
+                        return (
+                          <div key={status} className="rounded-lg border p-3 space-y-3 bg-muted/20">
+                            <div className="flex items-center justify-between">
+                              <p className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+                                {status.replace('_', ' ')}
+                              </p>
+                              <span className="text-xs rounded-full bg-background border px-2 py-0.5">
+                                {tasksByStatus.length}
+                              </span>
+                            </div>
+                            {tasksByStatus.length === 0 ? (
+                              <p className="text-xs text-muted-foreground">No tasks here yet.</p>
+                            ) : (
+                              tasksByStatus.map((task) => {
+                                const due = task.dueDate ? new Date(task.dueDate) : null;
+                                const isOverdue = !!due && due.getTime() < Date.now() && task.status !== 'done';
+                                const assignedRaw = task.assignedToUserId;
+                                const assignedId = typeof assignedRaw === 'string' ? assignedRaw : assignedRaw?._id;
+                                const assignedMember = organizerMembers.find((member) => member.user?._id === assignedId);
+                                return (
+                                  <div key={task._id} className={`rounded-lg border bg-background p-3 space-y-2 ${isOverdue ? 'border-destructive/50' : ''}`}>
+                                    <p className="font-medium">{task.title}</p>
+                                    {task.description ? (
+                                      <p className="text-xs text-muted-foreground">{task.description}</p>
+                                    ) : null}
+                                    <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                                      <span className="rounded-full bg-muted px-2 py-0.5 capitalize">{task.category}</span>
+                                      {task.budgetAmount ? <span>Rs. {task.budgetAmount}</span> : null}
+                                      {due ? (
+                                        <span className={isOverdue ? 'text-destructive font-medium' : ''}>
+                                          <Clock3 className="inline h-3 w-3 mr-1" />
+                                          {due.toLocaleString()}
+                                        </span>
+                                      ) : null}
+                                    </div>
+                                    {assignedMember?.user ? (
+                                      <p className="text-xs text-muted-foreground">
+                                        Owner: {assignedMember.user.displayName || assignedMember.user.email}
+                                      </p>
+                                    ) : null}
+                                    <div className="flex items-center gap-2 pt-1">
+                                      <select
+                                        value={task.status}
+                                        onChange={(e) => handleTaskStatusChange(task, e.target.value as 'todo' | 'in_progress' | 'done')}
+                                        className="h-8 flex-1 rounded-md border border-input bg-background px-2 text-xs"
+                                      >
+                                        <option value="todo">To Do</option>
+                                        <option value="in_progress">In Progress</option>
+                                        <option value="done">Done</option>
+                                      </select>
+                                      <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => handleDeleteTask(task._id)}
+                                      >
+                                        <Trash2 className="h-3.5 w-3.5" />
+                                      </Button>
+                                    </div>
+                                  </div>
+                                );
+                              })
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                 </CardContent>
@@ -1326,10 +1620,20 @@ export default function AdminPage() {
                     <BarChart3 className="w-5 h-5" />
                     Organizer Analytics
                   </CardTitle>
-                  <CardDescription>Conversion, audience mix, and post-event quality signals</CardDescription>
+                  <CardDescription>Conversion, audience mix, workload, and event performance.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  {!organizerAnalytics?.summary ? (
+                  {!canViewOrganizerAnalytics ? (
+                    <Alert>
+                      <AlertDescription>
+                        Your current role does not include analytics permissions. Ask an owner/admin/moderator for access.
+                      </AlertDescription>
+                    </Alert>
+                  ) : analyticsError ? (
+                    <Alert>
+                      <AlertDescription>{analyticsError}</AlertDescription>
+                    </Alert>
+                  ) : !organizerAnalytics?.summary ? (
                     <p className="text-sm text-muted-foreground">Analytics will appear once your workspace data loads.</p>
                   ) : (
                     <>
@@ -1353,6 +1657,22 @@ export default function AdminPage() {
                       </div>
 
                       <div className="rounded-lg border p-4">
+                        <p className="text-sm font-medium mb-2">Task Throughput</p>
+                        <div className="grid grid-cols-3 gap-2">
+                          {[
+                            { key: 'todo', label: 'To Do', value: organizerAnalytics.taskBoard?.todo || 0 },
+                            { key: 'inProgress', label: 'In Progress', value: organizerAnalytics.taskBoard?.inProgress || 0 },
+                            { key: 'done', label: 'Done', value: organizerAnalytics.taskBoard?.done || 0 },
+                          ].map((item) => (
+                            <div key={item.key} className="rounded-md bg-muted/40 p-2">
+                              <p className="text-xs text-muted-foreground">{item.label}</p>
+                              <p className="text-lg font-semibold">{item.value}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="rounded-lg border p-4">
                         <p className="text-sm font-medium mb-2">Audience Breakdown</p>
                         <div className="flex flex-wrap gap-2">
                           {Object.entries(organizerAnalytics.audienceBreakdown || {}).map(([key, value]) => (
@@ -1365,11 +1685,11 @@ export default function AdminPage() {
 
                       <div className="space-y-2">
                         <p className="text-sm font-medium">Best-performing events</p>
-                        {(organizerAnalytics.eventSummaries || []).slice(0, 4).map((event) => (
+                        {(organizerAnalytics.eventSummaries || []).slice(0, 5).map((event) => (
                           <div key={event.eventId} className="rounded-lg border p-3">
                             <p className="font-medium">{event.title}</p>
                             <p className="text-xs text-muted-foreground">
-                              {event.checkedIn}/{event.rsvps} checked in • {event.conversionRate}% conversion • {event.averageRating || 0}/5 rating
+                              {event.checkedIn}/{event.rsvps} checked in | {event.conversionRate}% conversion | {event.averageRating || 0}/5 rating
                             </p>
                           </div>
                         ))}
@@ -1386,9 +1706,11 @@ export default function AdminPage() {
                   <MessageSquare className="w-5 h-5" />
                   Organizer Messaging
                 </CardTitle>
-                <CardDescription>Lightweight team channels for organization or event coordination</CardDescription>
+                <CardDescription>
+                  Channel-based communication with auto-refresh and event-specific conversation rooms.
+                </CardDescription>
               </CardHeader>
-              <CardContent className="grid grid-cols-1 xl:grid-cols-[280px_1fr] gap-6">
+              <CardContent className="grid grid-cols-1 xl:grid-cols-[320px_1fr] gap-6">
                 <div className="space-y-4">
                   <form onSubmit={handleCreateChannel} className="space-y-3 rounded-lg border p-4">
                     <Input
@@ -1420,58 +1742,100 @@ export default function AdminPage() {
                   </form>
 
                   <div className="space-y-2">
-                    {channels.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">No channels yet.</p>
-                    ) : (
-                      channels.map((channel) => (
-                        <button
-                          key={channel._id}
-                          type="button"
-                          onClick={() => setSelectedChannelId(channel._id)}
-                          className={`w-full rounded-lg border px-3 py-2 text-left ${
-                            selectedChannelId === channel._id ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
-                          }`}
-                        >
-                          <p className="font-medium">{channel.name}</p>
-                          <p className="text-xs opacity-80">{channel.type}</p>
-                        </button>
-                      ))
-                    )}
+                    <div className="relative">
+                      <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        value={channelSearch}
+                        onChange={(e) => setChannelSearch(e.target.value)}
+                        placeholder="Search channels"
+                        className="pl-8"
+                      />
+                    </div>
+                    <div className="max-h-[420px] overflow-y-auto space-y-2 pr-1">
+                      {filteredChannels.length === 0 ? (
+                        <p className="text-sm text-muted-foreground">No channels found.</p>
+                      ) : (
+                        filteredChannels.map((channel: any) => (
+                          <button
+                            key={channel._id}
+                            type="button"
+                            onClick={() => setSelectedChannelId(channel._id)}
+                            className={`w-full rounded-lg border px-3 py-2 text-left transition-colors ${
+                              selectedChannelId === channel._id
+                                ? 'bg-primary text-primary-foreground'
+                                : 'hover:bg-muted/60'
+                            }`}
+                          >
+                            <p className="font-medium truncate">{channel.name}</p>
+                            <p className="text-xs opacity-80">
+                              {channel.type} | {channel.updatedAt ? new Date(channel.updatedAt).toLocaleString() : 'just now'}
+                            </p>
+                          </button>
+                        ))
+                      )}
+                    </div>
                   </div>
                 </div>
 
-                <div className="rounded-lg border p-4 space-y-4">
+                <div className="rounded-lg border p-0 overflow-hidden flex flex-col min-h-[520px]">
                   {!selectedChannelId ? (
-                    <p className="text-sm text-muted-foreground">Select a channel to start chatting.</p>
+                    <div className="p-6">
+                      <p className="text-sm text-muted-foreground">Select a channel to start chatting.</p>
+                    </div>
                   ) : (
                     <>
-                      <div className="max-h-80 overflow-y-auto space-y-3">
+                      <div className="border-b px-4 py-3 flex items-center justify-between">
+                        <div>
+                          <p className="font-medium">{selectedChannel?.name}</p>
+                          <p className="text-xs text-muted-foreground capitalize">{selectedChannel?.type} channel</p>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => selectedChannelId && fetchChannelMessages(selectedChannelId)}
+                        >
+                          <RefreshCcw className="w-4 h-4 mr-1" />
+                          Refresh
+                        </Button>
+                      </div>
+                      <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-muted/20">
                         {loadingMessages ? (
                           <p className="text-sm text-muted-foreground">Loading messages...</p>
                         ) : messages.length === 0 ? (
                           <p className="text-sm text-muted-foreground">No messages yet. Start the conversation.</p>
                         ) : (
-                          messages.map((message) => (
-                            <div key={message._id} className="rounded-lg bg-muted/40 p-3">
-                              <p className="text-sm font-medium">
-                                {message.userId?.displayName || message.userId?.email || 'Member'}
-                                {message.userId?.isAlumni ? ' • Alumni' : ''}
-                              </p>
-                              <p className="text-sm mt-1">{message.message}</p>
-                              <p className="text-xs text-muted-foreground mt-2">
-                                {new Date(message.createdAt).toLocaleString()}
-                              </p>
-                            </div>
-                          ))
+                          messages.map((message) => {
+                            const senderEmail = message.userId?.email?.toLowerCase() || '';
+                            const isOwn = !!currentUserEmail && senderEmail === currentUserEmail.toLowerCase();
+                            return (
+                              <div key={message._id} className={`flex ${isOwn ? 'justify-end' : 'justify-start'}`}>
+                                <div className={`max-w-[78%] rounded-2xl px-3 py-2 ${isOwn ? 'bg-primary text-primary-foreground' : 'bg-background border'}`}>
+                                  <p className="text-xs font-medium">
+                                    {message.userId?.displayName || message.userId?.email || 'Member'}
+                                  </p>
+                                  <p className="text-sm mt-1 whitespace-pre-wrap break-words">{message.message}</p>
+                                  <p className={`text-[11px] mt-1 ${isOwn ? 'text-primary-foreground/80' : 'text-muted-foreground'}`}>
+                                    {new Date(message.createdAt).toLocaleString()}
+                                  </p>
+                                </div>
+                              </div>
+                            );
+                          })
                         )}
+                        <div ref={messageBottomRef} />
                       </div>
-                      <form onSubmit={handleSendMessage} className="flex gap-2">
+                      <form onSubmit={handleSendMessage} className="border-t p-3 flex items-center gap-2">
                         <Input
                           placeholder="Send a message to this channel"
                           value={messageDraft}
+                          maxLength={500}
                           onChange={(e) => setMessageDraft(e.target.value)}
                         />
-                        <Button type="submit">Send</Button>
+                        <Button type="submit" disabled={!messageDraft.trim()}>
+                          <SendHorizontal className="h-4 w-4 mr-1" />
+                          Send
+                        </Button>
                       </form>
                     </>
                   )}
