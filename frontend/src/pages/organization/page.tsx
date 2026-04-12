@@ -32,6 +32,7 @@ export default function OrganizationPage() {
   const [isFollowing, setIsFollowing] = useState(false);
   const [isFollowActionLoading, setIsFollowActionLoading] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [subscribedOrgIds, setSubscribedOrgIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     let cancelled = false;
@@ -46,16 +47,19 @@ export default function OrganizationPage() {
           eventsAPI.getByOrganization(org._id),
           isAuthenticated ? organizationsAPI.getMySubscriptions().catch(() => []) : Promise.resolve([]),
         ]);
-        const isOrgFollowed =
-          isAuthenticated &&
-          Array.isArray(subscriptions) &&
-          subscriptions.some((item: any) => String(item?._id) === String(org._id));
+        const subscriptionIds = new Set<string>(
+          Array.isArray(subscriptions)
+            ? subscriptions.map((item: any) => String(item?._id)).filter(Boolean)
+            : []
+        );
+        const isOrgFollowed = isAuthenticated && subscriptionIds.has(String(org._id));
 
         if (!cancelled) {
           setOrganization(org);
           setAllOrganizations(allOrgs);
           setEvents(Array.isArray(orgEvents) ? orgEvents : []);
           setIsFollowing(isOrgFollowed);
+          setSubscribedOrgIds(subscriptionIds);
         }
       } catch (error) {
         if (!cancelled) {
@@ -87,6 +91,11 @@ export default function OrganizationPage() {
       if (isFollowing) {
         const response = await organizationsAPI.unsubscribeFromOrganization(organization._id);
         setIsFollowing(false);
+        setSubscribedOrgIds((prev) => {
+          const next = new Set(prev);
+          next.delete(String(organization._id));
+          return next;
+        });
         setOrganization((prev) =>
           prev
             ? {
@@ -100,6 +109,11 @@ export default function OrganizationPage() {
       } else {
         const response = await organizationsAPI.subscribeToOrganization(organization._id);
         setIsFollowing(true);
+        setSubscribedOrgIds((prev) => {
+          const next = new Set(prev);
+          next.add(String(organization._id));
+          return next;
+        });
         setOrganization((prev) =>
           prev
             ? {
@@ -277,7 +291,22 @@ export default function OrganizationPage() {
           ) : (
             <div className="space-y-5">
               {events.map((event) => (
-                <EventCard key={event._id} event={event} />
+                <EventCard
+                  key={event._id}
+                  event={event}
+                  isSubscribed={subscribedOrgIds.has(String(event.organizationId?._id || event.organizationId))}
+                  onSubscriptionChange={(organizationId, subscribed) => {
+                    setSubscribedOrgIds((prev) => {
+                      const next = new Set(prev);
+                      if (subscribed) next.add(String(organizationId));
+                      else next.delete(String(organizationId));
+                      return next;
+                    });
+                    if (organization && String(organization._id) === String(organizationId)) {
+                      setIsFollowing(subscribed);
+                    }
+                  }}
+                />
               ))}
             </div>
           )}

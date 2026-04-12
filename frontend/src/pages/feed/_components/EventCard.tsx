@@ -13,7 +13,7 @@ import {
   CarouselNext,
   CarouselPrevious,
 } from "@/components/ui/carousel.tsx";
-import { Dialog, DialogContent } from "@/components/ui/dialog.tsx";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog.tsx";
 import {
   Sheet,
   SheetContent,
@@ -128,6 +128,7 @@ function EventCard({
   const [isLoading, setIsLoading] = useState(false);
   const [subscribed, setSubscribed] = useState(isSubscribed);
   const [mediaDialogOpen, setMediaDialogOpen] = useState(false);
+  const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [selectedMediaIndex, setSelectedMediaIndex] = useState(0);
   const [loadedMedia, setLoadedMedia] = useState<Record<string, boolean>>({});
   const [mediaCarouselApi, setMediaCarouselApi] = useState<any>(null);
@@ -292,19 +293,19 @@ function EventCard({
   };
 
   const handleShareEvent = async () => {
-    try {
-      if (navigator.share) {
+    if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
+      try {
         await navigator.share({
           title: localEvent.title,
           text: localEvent.description,
           url: eventUrl,
         });
-      } else {
-        await handleCopyEventLink();
+        return;
+      } catch {
+        // User cancelled native share — fall through to open the share dialog.
       }
-    } catch {
-      // Ignore cancelled native share dialogs.
     }
+    setShareDialogOpen(true);
   };
 
   const handleOpenOrganization = () => {
@@ -783,9 +784,13 @@ function EventCard({
               {localEvent.tags && localEvent.tags.length > 0 && (
                 <div className="flex flex-wrap gap-2">
                   {localEvent.tags.slice(0, 3).map((tag: string) => (
-                    <Badge key={tag} variant="secondary" className="rounded-full border border-white/70 bg-slate-100/90 px-3 py-1 text-[11px] font-medium text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-800/90 dark:text-slate-200">
+                    <Link
+                      key={tag}
+                      to={`/feed?q=${encodeURIComponent(tag)}`}
+                      className="inline-flex items-center rounded-full border border-white/70 bg-slate-100/90 px-3 py-1 text-[11px] font-medium text-slate-700 shadow-sm transition-colors hover:border-primary/30 hover:bg-primary/10 hover:text-primary dark:border-slate-700 dark:bg-slate-800/90 dark:text-slate-200 dark:hover:border-primary/40 dark:hover:bg-primary/20 dark:hover:text-primary"
+                    >
                       #{tag}
-                    </Badge>
+                    </Link>
                   ))}
                 </div>
               )}
@@ -996,6 +1001,72 @@ function EventCard({
                 ))}
               </div>
             </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={shareDialogOpen} onOpenChange={setShareDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Share event</DialogTitle>
+            <DialogDescription>Pick where you'd like to share "{localEvent.title}".</DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-2 gap-2 pt-2 sm:grid-cols-4">
+            <Button
+              variant="outline"
+              className="h-auto flex-col gap-1 py-3"
+              onClick={() => {
+                window.open(
+                  `https://wa.me/?text=${encodeURIComponent(`${localEvent.title} — ${eventUrl}`)}`,
+                  "_blank",
+                  "noopener,noreferrer"
+                );
+                setShareDialogOpen(false);
+              }}
+            >
+              <span className="text-base font-semibold">WhatsApp</span>
+              <span className="text-[11px] text-muted-foreground">Send to contacts</span>
+            </Button>
+            <Button
+              variant="outline"
+              className="h-auto flex-col gap-1 py-3"
+              onClick={() => {
+                window.open(
+                  `https://twitter.com/intent/tweet?text=${encodeURIComponent(localEvent.title)}&url=${encodeURIComponent(eventUrl)}`,
+                  "_blank",
+                  "noopener,noreferrer"
+                );
+                setShareDialogOpen(false);
+              }}
+            >
+              <span className="text-base font-semibold">X / Twitter</span>
+              <span className="text-[11px] text-muted-foreground">Post to feed</span>
+            </Button>
+            <Button
+              variant="outline"
+              className="h-auto flex-col gap-1 py-3"
+              onClick={() => {
+                window.open(
+                  `mailto:?subject=${encodeURIComponent(localEvent.title)}&body=${encodeURIComponent(`${localEvent.description || ""}\n\n${eventUrl}`)}`,
+                  "_self"
+                );
+                setShareDialogOpen(false);
+              }}
+            >
+              <span className="text-base font-semibold">Email</span>
+              <span className="text-[11px] text-muted-foreground">Compose message</span>
+            </Button>
+            <Button
+              variant="outline"
+              className="h-auto flex-col gap-1 py-3"
+              onClick={async () => {
+                await handleCopyEventLink();
+                setShareDialogOpen(false);
+              }}
+            >
+              <span className="text-base font-semibold">Copy link</span>
+              <span className="text-[11px] text-muted-foreground">To clipboard</span>
+            </Button>
           </div>
         </DialogContent>
       </Dialog>

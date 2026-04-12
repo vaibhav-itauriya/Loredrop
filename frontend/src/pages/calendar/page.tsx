@@ -26,7 +26,8 @@ import {
   Trash2,
 } from "lucide-react";
 import EventCard from "../feed/_components/EventCard.tsx";
-import { interactionsAPI } from "@/lib/api";
+import { interactionsAPI, organizationsAPI } from "@/lib/api";
+import { useAuth } from "@/hooks/use-auth.ts";
 import { Button } from "@/components/ui/button.tsx";
 import { Badge } from "@/components/ui/badge.tsx";
 import { Card } from "@/components/ui/card.tsx";
@@ -101,6 +102,8 @@ export default function CalendarPage() {
   const [plannerView, setPlannerView] = useState<"month" | "week">("month");
   const [slotForm, setSlotForm] = useState(DEFAULT_SLOT_FORM);
   const [academicSlots, setAcademicSlots] = useState<AcademicSlot[]>([]);
+  const [subscribedOrgIds, setSubscribedOrgIds] = useState<Set<string>>(new Set());
+  const { isAuthenticated } = useAuth();
 
   useEffect(() => {
     const stored = localStorage.getItem(TIMETABLE_STORAGE_KEY);
@@ -132,6 +135,30 @@ export default function CalendarPage() {
     };
     fetch();
   }, []);
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      setSubscribedOrgIds(new Set());
+      return;
+    }
+    let cancelled = false;
+    const fetchSubs = async () => {
+      try {
+        const data = await organizationsAPI.getMySubscriptions();
+        if (cancelled) return;
+        const ids = new Set<string>(
+          Array.isArray(data) ? data.map((item: any) => String(item?._id)).filter(Boolean) : []
+        );
+        setSubscribedOrgIds(ids);
+      } catch (error) {
+        if (!cancelled) console.error("Failed to fetch subscriptions:", error);
+      }
+    };
+    fetchSubs();
+    return () => {
+      cancelled = true;
+    };
+  }, [isAuthenticated]);
 
   const normalizedEvents = useMemo<PlannerEvent[]>(() => {
     const mapped: PlannerEvent[] = [];
@@ -731,7 +758,18 @@ export default function CalendarPage() {
               <div className="mt-5 space-y-6">
                 {normalizedEvents.map((event) => (
                   <motion.div key={event.saveId} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }}>
-                    <EventCard event={event.raw} />
+                    <EventCard
+                      event={event.raw}
+                      isSubscribed={subscribedOrgIds.has(String(event.raw?.organizationId?._id || event.raw?.organizationId))}
+                      onSubscriptionChange={(organizationId, subscribed) => {
+                        setSubscribedOrgIds((prev) => {
+                          const next = new Set(prev);
+                          if (subscribed) next.add(String(organizationId));
+                          else next.delete(String(organizationId));
+                          return next;
+                        });
+                      }}
+                    />
                   </motion.div>
                 ))}
               </div>

@@ -30,6 +30,7 @@ export default function FeedPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const openEventId = searchParams.get("event");
+  const tagQueryParam = searchParams.get("q");
   const [hasRestoredState, setHasRestoredState] = useState(false);
   const [selectedOrgId, setSelectedOrgId] = useState<string | null>(null);
   const [feedMode, setFeedMode] = useState<"forYou" | "subscribed" | "trending" | "upcoming">("forYou");
@@ -52,7 +53,7 @@ export default function FeedPage() {
   const isTrendingSelected = feedMode === "trending";
   const isUpcomingSelected = feedMode === "upcoming";
   const subscribedOrgIds = useMemo(
-    () => subscribedOrganizations.map((org: any) => org._id),
+    () => subscribedOrganizations.map((org: any) => String(org._id)),
     [subscribedOrganizations]
   );
 
@@ -74,6 +75,16 @@ export default function FeedPage() {
       setHasRestoredState(true);
     }
   }, []);
+
+  useEffect(() => {
+    if (!tagQueryParam) return;
+    setSearchQuery(tagQueryParam);
+    setFeedMode("forYou");
+    setSelectedOrgId(null);
+    const next = new URLSearchParams(searchParams);
+    next.delete("q");
+    setSearchParams(next.toString() ? next : {}, { replace: true });
+  }, [tagQueryParam, searchParams, setSearchParams]);
 
   useEffect(() => {
     if (!hasRestoredState) return;

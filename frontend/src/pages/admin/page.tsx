@@ -168,6 +168,7 @@ export default function AdminPage() {
   const [actingOrgAdminId, setActingOrgAdminId] = useState<string | null>(null);
   const [assigningOrgAdmin, setAssigningOrgAdmin] = useState(false);
   const [uploadedImageDataUrl, setUploadedImageDataUrl] = useState<string>('');
+  const [uploadedImageDataUrls, setUploadedImageDataUrls] = useState<string[]>([]);
   const [analyticsOverview, setAnalyticsOverview] = useState<AnalyticsOverview | null>(null);
   const [loadingAnalytics, setLoadingAnalytics] = useState(false);
   const [newOrgAdminForm, setNewOrgAdminForm] = useState({
@@ -636,32 +637,53 @@ export default function AdminPage() {
   };
 
   const handleEventImageFileChange = (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    if (!file.type.startsWith('image/')) {
-      setError('Please select a valid image file');
-      return;
-    }
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
 
     const maxBytes = 5 * 1024 * 1024;
-    if (file.size > maxBytes) {
-      setError('Image size should be less than 5MB');
+    const invalid = files.find((file) => !file.type.startsWith('image/'));
+    if (invalid) {
+      setError('Please select valid image files');
+      return;
+    }
+    const oversized = files.find((file) => file.size > maxBytes);
+    if (oversized) {
+      setError('Each image must be less than 5MB');
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === 'string') {
-        setUploadedImageDataUrl(reader.result);
-      }
-    };
-    reader.onerror = () => setError('Failed to read image file');
-    reader.readAsDataURL(file);
+    Promise.all(
+      files.map(
+        (file) =>
+          new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => {
+              if (typeof reader.result === 'string') resolve(reader.result);
+              else reject(new Error('Failed to read image file'));
+            };
+            reader.onerror = () => reject(new Error('Failed to read image file'));
+            reader.readAsDataURL(file);
+          }),
+      ),
+    )
+      .then((dataUrls) => {
+        setUploadedImageDataUrls((prev) => [...prev, ...dataUrls]);
+        setUploadedImageDataUrl((prev) => prev || dataUrls[0] || '');
+      })
+      .catch(() => setError('Failed to read image file'));
+  };
+
+  const removeUploadedImageAt = (index: number) => {
+    setUploadedImageDataUrls((prev) => {
+      const next = prev.filter((_, i) => i !== index);
+      setUploadedImageDataUrl(next[0] || '');
+      return next;
+    });
   };
 
   const clearEventImage = () => {
     setUploadedImageDataUrl('');
+    setUploadedImageDataUrls([]);
     setEventForm((prev) => ({ ...prev, imageUrl: '' }));
     const fileInput = document.getElementById('eventImageFile') as HTMLInputElement | null;
     if (fileInput) fileInput.value = '';
@@ -701,7 +723,17 @@ export default function AdminPage() {
       setLoading(true);
       setError(null);
 
-      const eventImage = uploadedImageDataUrl || eventForm.imageUrl;
+      const uploadedImages = uploadedImageDataUrls.length > 0
+        ? uploadedImageDataUrls
+        : uploadedImageDataUrl
+          ? [uploadedImageDataUrl]
+          : [];
+      const urlImage = eventForm.imageUrl.trim();
+      const allImageUrls = uploadedImages.length > 0
+        ? [...uploadedImages, ...(urlImage ? [urlImage] : [])]
+        : urlImage
+          ? [urlImage]
+          : [];
       const parsedCapacity = eventForm.capacity ? parseInt(eventForm.capacity, 10) : undefined;
       if (eventForm.endDateTime && new Date(eventForm.endDateTime) <= new Date(eventForm.dateTime)) {
         setError('End time must be after start time.');
@@ -734,7 +766,7 @@ export default function AdminPage() {
         endDateTime: eventForm.endDateTime ? new Date(eventForm.endDateTime).toISOString() : undefined,
         capacity: parsedCapacity,
         organizationId: selectedOrg._id,
-        media: eventImage ? [{ type: 'image', url: eventImage }] : [],
+        media: allImageUrls.map((url) => ({ type: 'image', url })),
         tags: eventForm.tags.split(',').map(t => t.trim()).filter(t => t),
         audience: eventForm.audience,
         isPublished: true,
@@ -745,6 +777,7 @@ export default function AdminPage() {
       setSuccessMessage('Event created successfully!');
       setTimeConflictEvent(null);
       setUploadedImageDataUrl('');
+      setUploadedImageDataUrls([]);
       setEventForm({
         title: '',
         description: '',
@@ -1173,11 +1206,12 @@ export default function AdminPage() {
                         </div>
 
                         <div className="space-y-2">
-                          <Label htmlFor="eventImageFile">Event Image</Label>
+                          <Label htmlFor="eventImageFile">Event Images</Label>
                           <Input
                             id="eventImageFile"
                             type="file"
                             accept="image/*"
+                            multiple
                             onChange={handleEventImageFileChange}
                           />
                           <Input
@@ -1186,19 +1220,43 @@ export default function AdminPage() {
                             value={eventForm.imageUrl}
                             onChange={(e) => {
                               setEventForm({ ...eventForm, imageUrl: e.target.value });
-                              if (e.target.value) setUploadedImageDataUrl('');
                             }}
                           />
-                          {(uploadedImageDataUrl || eventForm.imageUrl) && (
-                            <div className="mt-2 relative inline-block">
-                              <img src={uploadedImageDataUrl || eventForm.imageUrl} alt="Event preview" className="h-20 w-20 object-cover rounded-lg" />
-                              <button
-                                type="button"
-                                onClick={clearEventImage}
-                                className="absolute -top-2 -right-2 bg-destructive text-white rounded-full p-1 hover:bg-destructive/90"
-                              >
-                                <X className="w-3 h-3" />
-                              </button>
+                          {(uploadedImageDataUrls.length > 0 || eventForm.imageUrl) && (
+                            <div className="mt-2 flex flex-wrap gap-2 items-start">
+                              {uploadedImageDataUrls.map((dataUrl, index) => (
+                                <div key={index} className="relative inline-block">
+                                  <img src={dataUrl} alt={`Event preview ${index + 1}`} className="h-20 w-20 object-cover rounded-lg" />
+                                  <button
+                                    type="button"
+                                    onClick={() => removeUploadedImageAt(index)}
+                                    className="absolute -top-2 -right-2 bg-destructive text-white rounded-full p-1 hover:bg-destructive/90"
+                                  >
+                                    <X className="w-3 h-3" />
+                                  </button>
+                                </div>
+                              ))}
+                              {eventForm.imageUrl && (
+                                <div className="relative inline-block">
+                                  <img src={eventForm.imageUrl} alt="Event preview URL" className="h-20 w-20 object-cover rounded-lg" />
+                                  <button
+                                    type="button"
+                                    onClick={() => setEventForm((prev) => ({ ...prev, imageUrl: '' }))}
+                                    className="absolute -top-2 -right-2 bg-destructive text-white rounded-full p-1 hover:bg-destructive/90"
+                                  >
+                                    <X className="w-3 h-3" />
+                                  </button>
+                                </div>
+                              )}
+                              {(uploadedImageDataUrls.length > 0 || eventForm.imageUrl) && (
+                                <button
+                                  type="button"
+                                  onClick={clearEventImage}
+                                  className="h-20 w-20 rounded-lg border border-dashed border-destructive/60 text-xs text-destructive hover:bg-destructive/5"
+                                >
+                                  Clear all
+                                </button>
+                              )}
                             </div>
                           )}
                         </div>
