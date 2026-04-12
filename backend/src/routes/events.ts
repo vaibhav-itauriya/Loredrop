@@ -160,6 +160,7 @@ router.get('/feed', optionalAuthMiddleware, async (req: Request, res: Response) 
       : [];
     const audience = parseAudienceQuery(req.query.audience);
     const dateRange = typeof req.query.dateRange === 'string' ? req.query.dateRange : undefined;
+    const searchQuery = typeof req.query.q === 'string' ? req.query.q.trim() : '';
 
     let query: any = { isPublished: true };
 
@@ -182,6 +183,21 @@ router.get('/feed', optionalAuthMiddleware, async (req: Request, res: Response) 
     const range = buildRangeFromPreset(dateRange);
     if (range) {
       query.dateTime = { $gte: range.start, $lte: range.end };
+    }
+
+    if (searchQuery) {
+      const escapedQuery = searchQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const searchRegex = new RegExp(escapedQuery, 'i');
+      const matchingOrganizations = await Organization.find({ name: searchRegex }).select('_id');
+      const matchingOrganizationIds = matchingOrganizations.map((org) => org._id);
+
+      query.$or = [
+        { title: searchRegex },
+        { description: searchRegex },
+        { venue: searchRegex },
+        { tags: searchRegex },
+        ...(matchingOrganizationIds.length > 0 ? [{ organizationId: { $in: matchingOrganizationIds } }] : []),
+      ];
     }
 
     const events = await Event.find(query)
@@ -428,8 +444,14 @@ router.post('/', authMiddleware, async (req: Request, res: Response) => {
     const requestedEndDateTime = endDateTime
       ? new Date(endDateTime)
       : new Date(requestedDateTime.getTime() + 60 * 60 * 1000);
+    if (Number.isNaN(requestedDateTime.getTime()) || Number.isNaN(requestedEndDateTime.getTime())) {
+      return res.status(400).json({ error: 'Invalid event date or time' });
+    }
+    if (requestedEndDateTime <= requestedDateTime) {
+      return res.status(400).json({ error: 'End time must be after start time' });
+    }
     const recurringDates = buildRecurringDates(requestedDateTime, recurrence);
-    const eventDurationMs = Math.max(30 * 60 * 1000, requestedEndDateTime.getTime() - requestedDateTime.getTime());
+    const eventDurationMs = requestedEndDateTime.getTime() - requestedDateTime.getTime();
     const conflicts = await Promise.all(
       recurringDates.map(async (candidateDate) => {
         const candidateEnd = new Date(candidateDate.getTime() + eventDurationMs);
@@ -583,6 +605,17 @@ router.patch('/:eventId', authMiddleware, async (req: Request, res: Response) =>
 
     const { title, description, dateTime, endDateTime, venue, location, mode, tags, audience, media, registrationLink, isPublished } = req.body;
     const update: any = {};
+    const nextStart = dateTime ? new Date(dateTime) : new Date(event.dateTime);
+    const nextEnd = endDateTime !== undefined
+      ? (endDateTime ? new Date(endDateTime) : undefined)
+      : (event.endDateTime ? new Date(event.endDateTime) : undefined);
+
+    if (Number.isNaN(nextStart.getTime()) || (nextEnd && Number.isNaN(nextEnd.getTime()))) {
+      return res.status(400).json({ error: 'Invalid event date or time' });
+    }
+    if (nextEnd && nextEnd <= nextStart) {
+      return res.status(400).json({ error: 'End time must be after start time' });
+    }
 
     if (title) update.title = title;
     if (description) update.description = description;

@@ -38,6 +38,7 @@ export default function EventEditDialog({
     tags: "",
     registrationLink: "",
   });
+  const [timeError, setTimeError] = useState("");
 
   useEffect(() => {
     if (!event) return;
@@ -52,14 +53,32 @@ export default function EventEditDialog({
       tags: Array.isArray(event.tags) ? event.tags.join(", ") : "",
       registrationLink: event.registrationLink || "",
     });
+    setTimeError("");
   }, [event, open]);
 
   if (!canEdit) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const startTime = form.dateTime ? new Date(form.dateTime) : null;
+    const endTime = form.endDateTime ? new Date(form.endDateTime) : null;
+
+    if (startTime && Number.isNaN(startTime.getTime())) {
+      setTimeError("Start time is invalid.");
+      return;
+    }
+    if (endTime && Number.isNaN(endTime.getTime())) {
+      setTimeError("End time is invalid.");
+      return;
+    }
+    if (startTime && endTime && endTime <= startTime) {
+      setTimeError("End time must be after start time.");
+      return;
+    }
+
     try {
       setSaving(true);
+      setTimeError("");
       const updated = await eventsAPI.updateEvent(event._id, {
         title: form.title,
         description: form.description,
@@ -123,13 +142,20 @@ export default function EventEditDialog({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <Label htmlFor={`date-${event._id}`}>Start Time</Label>
-              <Input id={`date-${event._id}`} type="datetime-local" value={form.dateTime} onChange={(e) => setForm({ ...form, dateTime: e.target.value })} />
+              <Input id={`date-${event._id}`} type="datetime-local" value={form.dateTime} onChange={(e) => {
+                setForm({ ...form, dateTime: e.target.value });
+                setTimeError("");
+              }} />
             </div>
             <div>
               <Label htmlFor={`endDate-${event._id}`}>End Time</Label>
-              <Input id={`endDate-${event._id}`} type="datetime-local" value={form.endDateTime} onChange={(e) => setForm({ ...form, endDateTime: e.target.value })} />
+              <Input id={`endDate-${event._id}`} type="datetime-local" min={form.dateTime || undefined} value={form.endDateTime} onChange={(e) => {
+                setForm({ ...form, endDateTime: e.target.value });
+                setTimeError("");
+              }} />
             </div>
           </div>
+          {timeError ? <p className="text-sm text-destructive">{timeError}</p> : null}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <Label htmlFor={`mode-${event._id}`}>Mode</Label>

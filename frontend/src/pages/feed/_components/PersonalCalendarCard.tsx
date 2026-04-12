@@ -234,7 +234,7 @@ export default function PersonalCalendarCard() {
   };
 
   return (
-    <Card className="overflow-hidden border-border/60 bg-[linear-gradient(180deg,rgba(255,248,235,0.86),rgba(255,255,255,0.98))] shadow-[0_16px_40px_rgba(15,23,42,0.06)]">
+    <Card className="overflow-hidden border-border/60 bg-[linear-gradient(180deg,rgba(255,248,235,0.86),rgba(255,255,255,0.98))] shadow-[0_16px_40px_rgba(15,23,42,0.06)] dark:bg-[linear-gradient(180deg,rgba(30,41,59,0.94),rgba(15,23,42,0.98))] dark:shadow-[0_16px_40px_rgba(2,6,23,0.32)]">
       <div className="border-b border-border/60 p-4">
         <div className="flex items-center justify-between gap-3">
           <div>
@@ -420,7 +420,7 @@ export default function PersonalCalendarCard() {
 
               <div className="mt-3 space-y-1.5">
                 {selectedDaySlots.map((slot) => (
-                  <div key={slot.id} className="flex items-center justify-between rounded-lg bg-sky-100 px-2 py-1 text-xs text-sky-950">
+                  <div key={slot.id} className="flex items-center justify-between rounded-lg bg-sky-100 px-2 py-1 text-xs text-sky-950 dark:bg-sky-400/12 dark:text-sky-100">
                     <div className="flex items-center gap-2">
                       <GraduationCap className="h-3 w-3" />
                       <span>{slot.title} · {slot.startTime}-{slot.endTime}</span>
@@ -444,7 +444,7 @@ export default function PersonalCalendarCard() {
                   );
 
                   return (
-                    <div key={event._id} className={`rounded-lg px-2 py-1 text-xs ${hasClash ? "bg-amber-100 text-amber-950" : "bg-orange-100 text-orange-950"}`}>
+                    <div key={event._id} className={`rounded-lg px-2 py-1 text-xs ${hasClash ? "bg-amber-100 text-amber-950 dark:bg-amber-400/12 dark:text-amber-100" : "bg-orange-100 text-orange-950 dark:bg-orange-400/12 dark:text-orange-100"}`}>
                       <div className="flex items-center gap-2">
                         {hasClash && <AlertTriangle className="h-3 w-3" />}
                         <span>{event.title} · {format(eventStart, "h:mm a")}</span>

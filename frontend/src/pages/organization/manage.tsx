@@ -13,7 +13,6 @@ import {
   ShieldCheck,
   Trash2,
 } from "lucide-react";
-import FeedHeader from "../feed/_components/FeedHeader.tsx";
 import EventEditDialog from "@/components/EventEditDialog.tsx";
 import { useAuth } from "@/hooks/use-auth.ts";
 import { organizationsAPI, eventsAPI } from "@/lib/api";
@@ -225,7 +224,6 @@ export default function OrganizationManagePage() {
   if (loading) {
     return (
       <div className="min-h-screen bg-background">
-        <FeedHeader />
         <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
           <div className="space-y-4">
             <Skeleton className="h-10 w-56" />
@@ -240,7 +238,6 @@ export default function OrganizationManagePage() {
   if (!isAuthenticated) {
     return (
       <div className="min-h-screen bg-background">
-        <FeedHeader />
         <div className="mx-auto max-w-3xl px-4 py-10 sm:px-6">
           <Card className="rounded-[2rem] border-white/50 bg-white/80 shadow-[0_28px_80px_rgba(15,23,42,0.08)] backdrop-blur">
             <CardHeader>
@@ -256,7 +253,6 @@ export default function OrganizationManagePage() {
   if (!selectedOrg) {
     return (
       <div className="min-h-screen bg-background">
-        <FeedHeader />
         <div className="mx-auto max-w-3xl px-4 py-10 sm:px-6">
           <Link to="/feed">
             <Button variant="ghost" className="mb-4 pl-0">
@@ -277,7 +273,6 @@ export default function OrganizationManagePage() {
 
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top,rgba(56,189,248,0.12),transparent_34%),linear-gradient(180deg,#f8fbff_0%,#f7f7fb_50%,#f5f7fb_100%)]">
-      <FeedHeader />
       <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
         <div className="mb-5 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>

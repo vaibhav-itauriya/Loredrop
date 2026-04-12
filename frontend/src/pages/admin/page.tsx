@@ -247,6 +247,20 @@ export default function AdminPage() {
     });
   }, [eventForm.dateTime, eventForm.endDateTime, events]);
 
+  const eventTimeError = useMemo(() => {
+    if (!eventForm.dateTime || !eventForm.endDateTime) return '';
+
+    const start = new Date(eventForm.dateTime);
+    const end = new Date(eventForm.endDateTime);
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+      return 'Enter a valid start and end time.';
+    }
+    if (end <= start) {
+      return 'End time must be after start time.';
+    }
+    return '';
+  }, [eventForm.dateTime, eventForm.endDateTime]);
+
   const filteredTasks = useMemo(() => {
     const normalizedQuery = taskSearch.trim().toLowerCase();
     return organizerTasks.filter((task) => {
@@ -432,6 +446,10 @@ export default function AdminPage() {
   const handleCreateEvent = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedOrg) return;
+    if (eventTimeError) {
+      setError(eventTimeError);
+      return;
+    }
 
     const conflictingEvent = liveConflicts[0] || null;
 
@@ -1243,6 +1261,7 @@ export default function AdminPage() {
                             <Input
                               id="endDateTime"
                               type="datetime-local"
+                              min={eventForm.dateTime || undefined}
                               value={eventForm.endDateTime}
                               onChange={(e) => {
                                 setEventForm({ ...eventForm, endDateTime: e.target.value });
@@ -1251,6 +1270,9 @@ export default function AdminPage() {
                             />
                           </div>
                         </div>
+                        {eventTimeError ? (
+                          <p className="text-sm text-destructive">{eventTimeError}</p>
+                        ) : null}
 
                         <div>
                           <Label htmlFor="capacity">Capacity (optional)</Label>

@@ -116,6 +116,7 @@ export const eventsAPI = {
       eventMode?: string[];
       audience?: string[];
       dateRange?: string;
+      q?: string;
     },
   ) => {
     const params = new URLSearchParams({ page: String(page), limit: String(limit) });
@@ -124,6 +125,7 @@ export const eventsAPI = {
     if (filters?.eventMode?.length) params.append('mode', filters.eventMode.join(','));
     if (filters?.audience?.length) params.append('audience', filters.audience.join(','));
     if (filters?.dateRange) params.append('dateRange', filters.dateRange);
+    if (filters?.q?.trim()) params.append('q', filters.q.trim());
     return fetchWithAuth(`${API_BASE_URL}/events/feed?${params}`);
   },
 

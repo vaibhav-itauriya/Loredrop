@@ -55,6 +55,7 @@ export default function FeedHeader({
   const [showRequestModal, setShowRequestModal] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [checkingMembership, setCheckingMembership] = useState(false);
+  const [isExiting, setIsExiting] = useState(false);
 
   // Check if user is org member and if main admin (mukunds23@iitk.ac.in)
   useEffect(() => {
@@ -102,17 +103,37 @@ export default function FeedHeader({
     }
   };
 
+  useEffect(() => {
+    if (!isExiting) return;
+    const timeout = window.setTimeout(() => setIsExiting(false), 450);
+    return () => window.clearTimeout(timeout);
+  }, [isExiting]);
+
+  const navigateWithHeaderExit = (path: string) => {
+    if (isExiting) return;
+    setIsExiting(true);
+    window.setTimeout(() => {
+      navigate(path);
+    }, 220);
+  };
+
+  const handleExitLinkClick =
+    (path: string) => (event: React.MouseEvent<HTMLElement>) => {
+      event.preventDefault();
+      navigateWithHeaderExit(path);
+    };
+
 
   return (
     <motion.header
       initial={{ y: -18, opacity: 0 }}
-      animate={{ y: 0, opacity: 1 }}
+      animate={isExiting ? { y: -26, opacity: 0, filter: "blur(6px)" } : { y: 0, opacity: 1, filter: "blur(0px)" }}
       transition={{ duration: 0.3, ease: "easeOut" }}
-      className="sticky top-0 z-50 border-b border-white/40 bg-[linear-gradient(180deg,rgba(255,255,255,0.88),rgba(255,255,255,0.78))] shadow-[0_10px_30px_rgba(15,23,42,0.05)] backdrop-blur-xl"
+      className="sticky top-0 z-50 border-b border-border/60 bg-[linear-gradient(180deg,rgba(255,255,255,0.88),rgba(255,255,255,0.78))] shadow-[0_10px_30px_rgba(15,23,42,0.05)] backdrop-blur-xl dark:bg-[linear-gradient(180deg,rgba(15,23,42,0.9),rgba(15,23,42,0.78))] dark:shadow-[0_10px_30px_rgba(2,6,23,0.35)]"
     >
       <div className="mx-auto w-full max-w-[1880px] px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
-          <Link to="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
+          <Link to="/" onClick={handleExitLinkClick("/")} className="flex items-center gap-2 hover:opacity-80 transition-opacity">
             <img src={platformLogo} alt="Loredrop logo" className="h-9 w-9 object-contain" />
             <span
               className="text-xl font-bold tracking-tight hidden sm:block"
@@ -122,7 +143,7 @@ export default function FeedHeader({
             </span>
           </Link>
 
-          <div className="hidden lg:flex items-center gap-2 rounded-full border border-white/55 bg-[linear-gradient(145deg,rgba(255,255,255,0.9),rgba(248,250,252,0.75))] px-2.5 py-2 shadow-[0_14px_34px_rgba(15,23,42,0.08)] backdrop-blur">
+          <div className="hidden lg:flex items-center gap-2 rounded-full border border-border/60 bg-[linear-gradient(145deg,rgba(255,255,255,0.9),rgba(248,250,252,0.75))] px-2.5 py-2 shadow-[0_14px_34px_rgba(15,23,42,0.08)] backdrop-blur dark:bg-[linear-gradient(145deg,rgba(30,41,59,0.88),rgba(15,23,42,0.78))] dark:shadow-[0_14px_34px_rgba(2,6,23,0.28)]">
             <Button
               variant={isForYouActive ? "default" : "ghost"}
               size="sm"
@@ -158,7 +179,7 @@ export default function FeedHeader({
               Upcoming
             </Button>
             {activeFilterCount > 0 && (
-              <Badge variant="outline" className="rounded-full border-white/70 bg-white/70 px-3 py-1 shadow-sm">
+              <Badge variant="outline" className="rounded-full border-border/70 bg-background/70 px-3 py-1 shadow-sm">
                 {activeFilterCount} filters
               </Badge>
             )}
@@ -199,21 +220,21 @@ export default function FeedHeader({
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-48">
-                    <Link to="/profile">
+                    <Link to="/profile" onClick={handleExitLinkClick("/profile")}>
                       <DropdownMenuItem>My Profile</DropdownMenuItem>
                     </Link>
                     {manageableOrgSlug && (
-                      <Link to={`/organizations/${manageableOrgSlug}/manage`}>
+                      <Link to={`/organizations/${manageableOrgSlug}/manage`} onClick={handleExitLinkClick(`/organizations/${manageableOrgSlug}/manage`)}>
                         <DropdownMenuItem>Manage Organization</DropdownMenuItem>
                       </Link>
                     )}
                     {isMainAdmin && (
-                      <Link to="/admin">
+                      <Link to="/admin" onClick={handleExitLinkClick("/admin")}>
                         <DropdownMenuItem>Admin Dashboard</DropdownMenuItem>
                       </Link>
                     )}
                     {!isMainAdmin && isOrgMember && (
-                      <Link to="/admin">
+                      <Link to="/admin" onClick={handleExitLinkClick("/admin")}>
                         <DropdownMenuItem>Create Event</DropdownMenuItem>
                       </Link>
                     )}
@@ -273,6 +294,7 @@ export default function FeedHeader({
                   </Link>
                   <Link
                     to="/calendar"
+                    onClick={handleExitLinkClick("/calendar")}
                     className="py-2 text-sm font-medium hover:text-primary transition-colors"
                   >
                     My Calendar
@@ -281,6 +303,7 @@ export default function FeedHeader({
                     <>
                       <Link
                         to="/profile"
+                        onClick={handleExitLinkClick("/profile")}
                         className="py-2 text-sm font-medium hover:text-primary transition-colors"
                       >
                         My Profile
@@ -288,6 +311,7 @@ export default function FeedHeader({
                       {manageableOrgSlug && (
                         <Link
                           to={`/organizations/${manageableOrgSlug}/manage`}
+                          onClick={handleExitLinkClick(`/organizations/${manageableOrgSlug}/manage`)}
                           className="py-2 text-sm font-medium hover:text-primary transition-colors"
                         >
                           Manage Organization
@@ -296,6 +320,7 @@ export default function FeedHeader({
                       {isMainAdmin && (
                         <Link
                           to="/admin"
+                          onClick={handleExitLinkClick("/admin")}
                           className="py-2 text-sm font-medium hover:text-primary transition-colors"
                         >
                           Admin Dashboard
@@ -304,6 +329,7 @@ export default function FeedHeader({
                       {!isMainAdmin && isOrgMember && (
                         <Link
                           to="/admin"
+                          onClick={handleExitLinkClick("/admin")}
                           className="py-2 text-sm font-medium hover:text-primary transition-colors"
                         >
                           Create Event

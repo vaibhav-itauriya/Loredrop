@@ -16,9 +16,10 @@ type EventWithOrg = {
 
 type UpcomingEventsSidebarProps = {
   events: EventWithOrg[];
+  onOpenEvent?: (eventId: string) => void;
 };
 
-export default function UpcomingEventsSidebar({ events }: UpcomingEventsSidebarProps) {
+export default function UpcomingEventsSidebar({ events, onOpenEvent }: UpcomingEventsSidebarProps) {
   if (events.length === 0) return null;
 
   return (
@@ -40,12 +41,17 @@ export default function UpcomingEventsSidebar({ events }: UpcomingEventsSidebarP
       </div>
       <div className="space-y-3">
         {events.map((event) => (
-          <Card
+          <button
             key={event._id}
-            className="group overflow-hidden border-white/60 bg-[linear-gradient(145deg,rgba(255,255,255,0.92),rgba(248,250,252,0.88))] p-4 backdrop-blur-xl transition-all duration-300 hover:-translate-y-1 hover:border-primary/30 hover:shadow-[0_22px_55px_rgba(88,74,217,0.12)]"
+            type="button"
+            onClick={() => onOpenEvent?.(event._id)}
+            className="block w-full text-left"
           >
-            <div className="flex gap-3">
-              <div className="flex h-12 w-12 flex-shrink-0 flex-col items-center justify-center rounded-2xl border border-white/70 bg-[linear-gradient(145deg,rgba(99,102,241,0.16),rgba(249,115,22,0.12))] shadow-[inset_0_1px_0_rgba(255,255,255,0.8)]">
+            <Card
+              className="group overflow-hidden border-white/60 bg-[linear-gradient(145deg,rgba(255,255,255,0.92),rgba(248,250,252,0.88))] p-4 backdrop-blur-xl transition-all duration-300 hover:-translate-y-1 hover:border-primary/30 hover:shadow-[0_22px_55px_rgba(88,74,217,0.12)] dark:border-slate-700/70 dark:bg-[linear-gradient(145deg,rgba(15,23,42,0.96),rgba(30,41,59,0.92))] dark:hover:shadow-[0_22px_55px_rgba(2,6,23,0.32)]"
+            >
+              <div className="flex gap-3">
+              <div className="flex h-12 w-12 flex-shrink-0 flex-col items-center justify-center rounded-2xl border border-white/70 bg-[linear-gradient(145deg,rgba(99,102,241,0.16),rgba(249,115,22,0.12))] shadow-[inset_0_1px_0_rgba(255,255,255,0.8)] dark:border-slate-700 dark:bg-[linear-gradient(145deg,rgba(99,102,241,0.2),rgba(249,115,22,0.14))] dark:shadow-none">
                 <span className="text-xs font-medium text-primary">
                   {format(new Date(event.dateTime), "MMM")}
                 </span>
@@ -58,7 +64,7 @@ export default function UpcomingEventsSidebar({ events }: UpcomingEventsSidebarP
               </div>
 
               <div className="flex-1 min-w-0">
-                <p className="mb-1 line-clamp-1 text-sm font-semibold transition-colors group-hover:text-primary">
+                <p className="mb-1 line-clamp-1 text-sm font-semibold transition-colors group-hover:text-primary dark:text-slate-100">
                   {event.title}
                 </p>
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -70,15 +76,16 @@ export default function UpcomingEventsSidebar({ events }: UpcomingEventsSidebarP
                   <span className="truncate">{event.venue || "Venue TBA"}</span>
                 </div>
               </div>
-              <ChevronRight className="mt-1 h-4 w-4 flex-shrink-0 text-muted-foreground transition-transform group-hover:translate-x-1 group-hover:text-primary" />
-            </div>
+                <ChevronRight className="mt-1 h-4 w-4 flex-shrink-0 text-muted-foreground transition-transform group-hover:translate-x-1 group-hover:text-primary" />
+              </div>
 
-            {event.organization && (
-              <Badge variant="secondary" className="mt-3 rounded-full border border-white/70 bg-white/70 text-xs text-primary shadow-sm">
-                {event.organization.name}
-              </Badge>
-            )}
-          </Card>
+              {event.organization && (
+                <Badge variant="secondary" className="mt-3 rounded-full border border-white/70 bg-white/70 text-xs text-primary shadow-sm dark:border-slate-700 dark:bg-slate-900/75 dark:text-slate-200 dark:shadow-none">
+                  {event.organization.name}
+                </Badge>
+              )}
+            </Card>
+          </button>
         ))}
       </div>
     </div>

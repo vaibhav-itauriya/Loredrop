@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ArrowLeft, CalendarDays, Check, Layers, Loader2, Plus } from "lucide-react";
-import FeedHeader from "../feed/_components/FeedHeader.tsx";
 import EventCard from "../feed/_components/EventCard.tsx";
 import { Badge } from "@/components/ui/badge.tsx";
 import { Button } from "@/components/ui/button.tsx";
@@ -143,7 +142,6 @@ export default function OrganizationPage() {
   if (loading) {
     return (
       <div className="min-h-screen bg-background">
-        <FeedHeader />
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-4">
           <Skeleton className="h-10 w-60" />
           <Skeleton className="h-52 w-full rounded-2xl" />
@@ -157,7 +155,6 @@ export default function OrganizationPage() {
   if (!organization) {
     return (
       <div className="min-h-screen bg-background">
-        <FeedHeader />
         <div className="max-w-4xl mx-auto px-4 py-8">
           <p className="text-muted-foreground">Organization not found.</p>
           <Link to="/feed">
@@ -170,7 +167,6 @@ export default function OrganizationPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <FeedHeader />
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         <Link to="/feed">
           <Button variant="ghost" className="mb-4 pl-0">

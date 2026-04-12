@@ -1,5 +1,5 @@
 import { format, isPast, isToday, isTomorrow } from "date-fns";
-import { useState, useEffect, useMemo, memo } from "react";
+import { useState, useEffect, useMemo, memo, type SyntheticEvent } from "react";
 import { Link } from "react-router-dom";
 import { motion } from "motion/react";
 import { Card } from "@/components/ui/card.tsx";
@@ -43,19 +43,20 @@ import {
   FileDown,
   Plus,
   Check,
-  Play,
 } from "lucide-react";
 import { toast } from "sonner";
 import { eventsAPI, interactionsAPI, organizationsAPI } from "@/lib/api";
 import { useAuth } from "@/hooks/use-auth.ts";
 import EventEditDialog from "@/components/EventEditDialog.tsx";
-import { useVideoPlayer } from "@/components/providers/video-player.tsx";
+import { cn } from "@/lib/utils.ts";
 
 type EventCardProps = {
   event: any;
   isSubscribed?: boolean;
   adminOrgIds?: string[];
   onSubscriptionChange?: (organizationId: string, subscribed: boolean) => void;
+  onOpenPost?: (event: any) => void;
+  variant?: "feed" | "dialog";
 };
 
 function getEventDateLabel(dateTime: string): string {
@@ -102,14 +103,20 @@ function extractYouTubeLinks(text: string): { id: string; url: string }[] {
   return matches;
 }
 
+function stripYouTubeLinks(text: string): string {
+  if (!text) return "";
+  return text.replace(YOUTUBE_URL_REGEX, "").replace(/\s{2,}/g, " ").trim();
+}
+
 function EventCard({
   event,
   isSubscribed = false,
   adminOrgIds = [],
   onSubscriptionChange,
+  onOpenPost,
+  variant = "feed",
 }: EventCardProps) {
   const { isAuthenticated, user } = useAuth();
-  const { playVideo } = useVideoPlayer();
   const [localEvent, setLocalEvent] = useState(event);
   const [hasUpvoted, setHasUpvoted] = useState(event.hasUpvoted || false);
   const [upvoteCount, setUpvoteCount] = useState(event.upvoteCount || 0);
@@ -125,7 +132,6 @@ function EventCard({
   const [loadedMedia, setLoadedMedia] = useState<Record<string, boolean>>({});
   const [mediaCarouselApi, setMediaCarouselApi] = useState<any>(null);
   const [mediaDialogCarouselApi, setMediaDialogCarouselApi] = useState<any>(null);
-
   useEffect(() => {
     setLocalEvent(event);
     setHasUpvoted(event.hasUpvoted || false);
@@ -395,11 +401,21 @@ function EventCard({
     );
   const youtubeLinks = useMemo(() => extractYouTubeLinks(localEvent.description || ""), [localEvent.description]);
   const primaryYoutubeLink = youtubeLinks[0] || null;
+  const inlineYoutubeId = primaryYoutubeLink?.id || null;
+  const descriptionWithoutYoutubeLinks = useMemo(
+    () => stripYouTubeLinks(localEvent.description || ""),
+    [localEvent.description],
+  );
+  const displayDescription = descriptionWithoutYoutubeLinks || localEvent.description || "";
 
-  const handlePlayYouTubeVideo = () => {
-    if (!primaryYoutubeLink) return;
-    playVideo(primaryYoutubeLink.url);
-    toast.success("Opening video player...");
+  const canOpenPost = variant === "feed" && !!onOpenPost;
+  const openPost = () => {
+    if (!canOpenPost) return;
+    onOpenPost(localEvent);
+  };
+
+  const stopCardOpen = (event: SyntheticEvent) => {
+    event.stopPropagation();
   };
 
   return (
@@ -407,13 +423,17 @@ function EventCard({
       initial={{ opacity: 0, y: 14 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.28, ease: "easeOut" }}
-      whileHover={{ y: -4 }}
+      whileHover={variant === "feed" ? { y: -4 } : undefined}
     >
       <Card
         data-event-id={localEvent._id}
-        className="group overflow-hidden rounded-[1.75rem] border border-white/70 bg-[linear-gradient(145deg,rgba(255,255,255,0.97),rgba(248,250,252,0.92))] shadow-[0_18px_50px_rgba(15,23,42,0.08)] ring-1 ring-slate-950/[0.03] backdrop-blur-xl transition-all duration-300 hover:border-primary/20 hover:shadow-[0_26px_70px_rgba(15,23,42,0.14)]"
+        className={cn(
+          "group overflow-hidden rounded-[1.75rem] border border-white/70 bg-[linear-gradient(145deg,rgba(255,255,255,0.97),rgba(248,250,252,0.92))] shadow-[0_18px_50px_rgba(15,23,42,0.08)] ring-1 ring-slate-950/[0.03] backdrop-blur-xl transition-all duration-300 hover:border-primary/20 hover:shadow-[0_26px_70px_rgba(15,23,42,0.14)] dark:border-slate-700/70 dark:bg-[linear-gradient(145deg,rgba(30,41,59,0.96),rgba(15,23,42,0.94))] dark:ring-white/[0.04] dark:shadow-[0_18px_50px_rgba(2,6,23,0.34)]",
+          canOpenPost ? "cursor-pointer" : "",
+        )}
+        onClick={openPost}
       >
-        <div className={`relative w-full overflow-hidden bg-[linear-gradient(180deg,rgba(226,232,240,0.5),rgba(203,213,225,0.28))] ${hasFallbackMedia ? "aspect-square" : ""}`}>
+        <div className={`relative w-full overflow-hidden bg-[linear-gradient(180deg,rgba(226,232,240,0.5),rgba(203,213,225,0.28))] ${hasFallbackMedia ? (inlineYoutubeId ? "aspect-video" : "aspect-square") : ""}`}>
           <Carousel
             opts={{ loop: mediaItems.length > 1 }}
             className={hasFallbackMedia ? "h-full w-full [&_[data-slot=carousel-content]]:h-full [&_[data-slot=carousel-item]]:h-full" : "w-full"}
@@ -422,15 +442,32 @@ function EventCard({
             <CarouselContent className={`ml-0 ${hasFallbackMedia ? "h-full items-stretch" : ""}`}>
               {mediaItems.map((media: any, index: number) => (
                 <CarouselItem key={`${localEvent._id}-media-${index}`} className={`pl-0 ${media.kind === "fallback" ? "basis-full h-full" : ""}`}>
-                  <button
-                    type="button"
-                    className={`relative block w-full overflow-hidden ${media.kind === "fallback" ? "h-full min-h-full" : ""}`}
-                    onClick={() => {
-                      setSelectedMediaIndex(index);
-                      setMediaDialogOpen(true);
-                    }}
-                  >
-                    {media.kind === "fallback" ? (
+                  {media.kind === "fallback" && inlineYoutubeId ? (
+                    <div
+                      className="relative h-full min-h-full w-full overflow-hidden"
+                      onClick={stopCardOpen}
+                    >
+                      <div className="relative h-full w-full bg-black">
+                        <iframe
+                          className="absolute inset-0 h-full w-full"
+                          src={`https://www.youtube-nocookie.com/embed/${inlineYoutubeId}?rel=0`}
+                          title={`${localEvent.title} video`}
+                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                          allowFullScreen
+                        />
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      className={`relative block w-full overflow-hidden ${media.kind === "fallback" ? "h-full min-h-full" : ""}`}
+                      onClick={(event) => {
+                        stopCardOpen(event);
+                        setSelectedMediaIndex(index);
+                        setMediaDialogOpen(true);
+                      }}
+                    >
+                      {media.kind === "fallback" ? (
                       <div className="relative grid h-full min-h-full w-full grid-rows-[auto_1fr_auto] overflow-hidden bg-[linear-gradient(140deg,#17324d_0%,#0e7490_45%,#f97316_100%)] p-6 text-left">
                         <motion.div
                           aria-hidden="true"
@@ -475,7 +512,7 @@ function EventCard({
                               {localEvent.title}
                             </h3>
                             <p className="mt-4 max-w-md text-sm leading-6 text-white/78">
-                              {localEvent.description || "A fresh drop from your community feed."}
+                              {displayDescription || "A fresh drop from your community feed."}
                             </p>
                           </div>
                         </div>
@@ -493,26 +530,27 @@ function EventCard({
                           </p>
                         </div>
                       </div>
-                    ) : (
-                      <>
-                        {!loadedMedia[media.url] && (
-                          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.48),rgba(148,163,184,0.14))]" />
-                        )}
-                        <img
-                          src={media.url}
-                          alt={media.alt}
-                          className={`block w-full transition duration-700 group-hover:scale-[1.015] ${
-                            loadedMedia[media.url] ? "h-auto scale-100 blur-0" : "h-auto scale-[1.01] blur-xl"
-                          }`}
-                          loading="lazy"
-                          decoding="async"
-                          onLoad={() =>
-                            setLoadedMedia((prev) => ({ ...prev, [media.url]: true }))
-                          }
-                        />
-                      </>
-                    )}
-                  </button>
+                      ) : (
+                        <>
+                          {!loadedMedia[media.url] && (
+                            <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.48),rgba(148,163,184,0.14))]" />
+                          )}
+                          <img
+                            src={media.url}
+                            alt={media.alt}
+                            className={`block w-full transition duration-700 group-hover:scale-[1.015] ${
+                              loadedMedia[media.url] ? "h-auto scale-100 blur-0" : "h-auto scale-[1.01] blur-xl"
+                            }`}
+                            loading="lazy"
+                            decoding="async"
+                            onLoad={() =>
+                              setLoadedMedia((prev) => ({ ...prev, [media.url]: true }))
+                            }
+                          />
+                        </>
+                      )}
+                    </button>
+                  )}
                 </CarouselItem>
               ))}
             </CarouselContent>
@@ -523,8 +561,10 @@ function EventCard({
               </>
             )}
           </Carousel>
-          <div className="absolute inset-0 bg-[linear-gradient(to_top,rgba(15,23,42,0.72),rgba(15,23,42,0.08)_42%,rgba(255,255,255,0.02))]" />
-          <div className="absolute left-4 top-4 flex flex-wrap gap-2">
+          {!inlineYoutubeId && (
+            <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_top,rgba(15,23,42,0.72),rgba(15,23,42,0.08)_42%,rgba(255,255,255,0.02))]" />
+          )}
+          <div className={`absolute left-4 top-4 flex flex-wrap gap-2 ${inlineYoutubeId ? "" : "pointer-events-none"}`}>
             {localEvent.recommended && (
               <Badge className="rounded-full border border-amber-200/70 bg-amber-300/90 px-3 py-1 text-[11px] font-semibold text-amber-950 shadow-[0_8px_20px_rgba(245,158,11,0.24)] backdrop-blur-sm">
                 For You
@@ -537,15 +577,17 @@ function EventCard({
               {localEvent.mode}
             </Badge>
           </div>
-          <div className="absolute bottom-4 left-4 right-4 flex items-end justify-between gap-3">
-            <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-white/72">Next up</p>
-              <p className="mt-1 text-[1.15rem] font-semibold text-white">{eventTimeDisplay}</p>
+          {!inlineYoutubeId && (
+            <div className="pointer-events-none absolute bottom-4 left-4 right-4 flex items-end justify-between gap-3">
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-white/72">Next up</p>
+                <p className="mt-1 text-[1.15rem] font-semibold text-white">{eventTimeDisplay}</p>
+              </div>
+              <div className="rounded-full border border-white/20 bg-black/25 px-3 py-1 text-[11px] font-medium text-white shadow-[0_8px_20px_rgba(15,23,42,0.18)]">
+                {format(new Date(localEvent.dateTime), "MMM d, yyyy")}
+              </div>
             </div>
-            <div className="rounded-full border border-white/20 bg-black/25 px-3 py-1 text-[11px] font-medium text-white shadow-[0_8px_20px_rgba(15,23,42,0.18)]">
-              {format(new Date(localEvent.dateTime), "MMM d, yyyy")}
-            </div>
-          </div>
+          )}
           {mediaItems.length > 1 && (
             <div className="absolute bottom-4 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-black/30 px-3 py-1">
               {mediaItems.map((_: any, index: number) => (
@@ -561,7 +603,7 @@ function EventCard({
         <div className="space-y-0">
           <div className="p-4 sm:p-5">
             <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0 flex items-start gap-3">
+              <div className="min-w-0 flex items-start gap-3" onClick={stopCardOpen}>
                 {org?.slug ? (
                   <Link to={`/organizations/${org.slug}`} className="flex min-w-0 items-start gap-3 group">
                     <Avatar className="h-12 w-12 rounded-full border border-white/70 shadow-[0_10px_24px_rgba(15,23,42,0.08)] ring-1 ring-slate-950/[0.03]">
@@ -572,7 +614,7 @@ function EventCard({
                     </Avatar>
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                        <p className="truncate text-[1.02rem] font-semibold tracking-[-0.01em] text-slate-950 group-hover:text-primary transition-colors">
+                        <p className="truncate text-[1.02rem] font-semibold tracking-[-0.01em] text-slate-950 transition-colors group-hover:text-primary dark:text-slate-100">
                           {org?.name || "Unknown Organization"}
                         </p>
                         {localEvent.recommended && (
@@ -581,10 +623,10 @@ function EventCard({
                           </Badge>
                         )}
                       </div>
-                      <p className="text-sm text-slate-600">
+                      <p className="text-sm text-slate-600 dark:text-slate-300/80">
                         {author?.name || author?.displayName || "Unknown Author"}
                       </p>
-                      <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
+                      <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">
                         <span>{format(new Date(localEvent.dateTime), "MMM d, yyyy")}</span>
                         <span>•</span>
                         <span>{eventTimeDisplay}</span>
@@ -603,7 +645,7 @@ function EventCard({
                     </Avatar>
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                        <p className="truncate text-[1.02rem] font-semibold tracking-[-0.01em] text-slate-950">
+                        <p className="truncate text-[1.02rem] font-semibold tracking-[-0.01em] text-slate-950 dark:text-slate-100">
                           {org?.name || "Unknown Organization"}
                         </p>
                         {localEvent.recommended && (
@@ -612,10 +654,10 @@ function EventCard({
                           </Badge>
                         )}
                       </div>
-                      <p className="text-sm text-slate-600">
+                      <p className="text-sm text-slate-600 dark:text-slate-300/80">
                         {author?.name || author?.displayName || "Unknown Author"}
                       </p>
-                      <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
+                      <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">
                         <span>{format(new Date(localEvent.dateTime), "MMM d, yyyy")}</span>
                         <span>•</span>
                         <span>{eventTimeDisplay}</span>
@@ -627,14 +669,14 @@ function EventCard({
                 )}
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2" onClick={stopCardOpen}>
                 <Button
                   variant={subscribed ? "secondary" : "outline"}
                   size="sm"
                   className={`rounded-full border px-4 shadow-sm transition-all ${
                     subscribed
                       ? "border-primary/15 bg-primary/10 text-primary hover:bg-primary/14"
-                      : "border-slate-200 bg-white/85 hover:border-primary/20 hover:bg-primary/5"
+                      : "border-slate-200 bg-white/85 hover:border-primary/20 hover:bg-primary/5 dark:border-slate-700 dark:bg-slate-800/80 dark:hover:bg-primary/10"
                   }`}
                   onClick={handleToggleSubscription}
                 >
@@ -655,13 +697,13 @@ function EventCard({
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="h-9 w-9 rounded-full border border-transparent text-slate-500 transition-all hover:border-slate-200 hover:bg-white hover:text-slate-900"
+                      className="h-9 w-9 rounded-full border border-transparent text-slate-500 transition-all hover:border-slate-200 hover:bg-white hover:text-slate-900 dark:text-slate-400 dark:hover:border-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-100"
                       aria-label="More options"
                     >
                       <MoreHorizontal className="w-4 h-4" />
                     </Button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-56 rounded-2xl border-white/70 bg-white/95 shadow-[0_18px_45px_rgba(15,23,42,0.14)] backdrop-blur-xl">
+                  <DropdownMenuContent align="end" className="w-56 rounded-2xl border-white/70 bg-white/95 shadow-[0_18px_45px_rgba(15,23,42,0.14)] backdrop-blur-xl dark:border-slate-700 dark:bg-slate-900/95 dark:shadow-[0_18px_45px_rgba(2,6,23,0.35)]">
                     <DropdownMenuItem onClick={handleShareEvent} className="gap-2">
                       <Share2 className="w-4 h-4" />
                       Share Event
@@ -674,12 +716,6 @@ function EventCard({
                       <MessageCircle className="w-4 h-4" />
                       View Comments
                     </DropdownMenuItem>
-                    {primaryYoutubeLink && (
-                      <DropdownMenuItem onClick={handlePlayYouTubeVideo} className="gap-2">
-                        <Play className="w-4 h-4" />
-                        Watch Video
-                      </DropdownMenuItem>
-                    )}
                     <DropdownMenuSeparator />
                     <DropdownMenuItem onClick={handleCalendarSave} disabled={isLoading || !isAuthenticated} className="gap-2">
                       <Bookmark className="w-4 h-4" />
@@ -722,28 +758,17 @@ function EventCard({
             </div>
 
             <div className="mt-4 space-y-3">
-              <h3 className="text-[1.38rem] font-semibold leading-[1.02] tracking-[-0.02em] text-slate-950 sm:text-[1.52rem]" style={{ fontFamily: "var(--font-display)" }}>
+              <h3 className="text-[1.38rem] font-semibold leading-[1.02] tracking-[-0.02em] text-slate-950 sm:text-[1.52rem] dark:text-slate-50" style={{ fontFamily: "var(--font-display)" }}>
                 {localEvent.title}
               </h3>
-              <p className="line-clamp-3 text-[15px] leading-6 text-slate-700">
-                {localEvent.description}
+              <p className="line-clamp-3 text-[15px] leading-6 text-slate-700 dark:text-slate-300/90">
+                {displayDescription || "A fresh drop from your community feed."}
               </p>
-              {primaryYoutubeLink && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-8 rounded-full border-primary/20 bg-primary/5 px-3 text-primary hover:bg-primary/10"
-                  onClick={handlePlayYouTubeVideo}
-                >
-                  <Play className="mr-1.5 h-3.5 w-3.5" />
-                  Watch Video
-                </Button>
-              )}
-              <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+              <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
                 <Badge variant="outline" className="rounded-full border-primary/10 bg-primary/[0.07] px-3 py-1 font-medium text-primary shadow-sm">
                   {eventDateLabel}
                 </Badge>
-                <Badge variant="outline" className="rounded-full border-slate-200/90 bg-white/75 px-3 py-1 font-medium text-slate-700 shadow-sm">
+                <Badge variant="outline" className="rounded-full border-slate-200/90 bg-white/75 px-3 py-1 font-medium text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-800/75 dark:text-slate-200">
                   {localEvent.mode}
                 </Badge>
                 <span className="inline-flex items-center gap-1">
@@ -754,7 +779,7 @@ function EventCard({
               {localEvent.tags && localEvent.tags.length > 0 && (
                 <div className="flex flex-wrap gap-2">
                   {localEvent.tags.slice(0, 3).map((tag: string) => (
-                    <Badge key={tag} variant="secondary" className="rounded-full border border-white/70 bg-slate-100/90 px-3 py-1 text-[11px] font-medium text-slate-700 shadow-sm">
+                    <Badge key={tag} variant="secondary" className="rounded-full border border-white/70 bg-slate-100/90 px-3 py-1 text-[11px] font-medium text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-800/90 dark:text-slate-200">
                       #{tag}
                     </Badge>
                   ))}
@@ -763,16 +788,16 @@ function EventCard({
             </div>
           </div>
 
-          <div className="border-y border-slate-200/80 bg-[linear-gradient(180deg,rgba(248,250,252,0.8),rgba(241,245,249,0.72))] px-4 py-3 text-sm text-slate-500 sm:px-5">
+          <div className="border-y border-slate-200/80 bg-[linear-gradient(180deg,rgba(248,250,252,0.8),rgba(241,245,249,0.72))] px-4 py-3 text-sm text-slate-500 sm:px-5 dark:border-slate-700/80 dark:bg-[linear-gradient(180deg,rgba(30,41,59,0.72),rgba(15,23,42,0.82))] dark:text-slate-400">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex flex-wrap items-center gap-3">
-                <span className="font-semibold text-slate-900">{upvoteCount} likes</span>
+                <span className="font-semibold text-slate-900 dark:text-slate-100">{upvoteCount} likes</span>
                 <span>{commentCount} comments</span>
                 <span>{hasCalendarSave ? "Saved to your calendar" : "Not saved yet"}</span>
               </div>
               {localEvent.registrationLink && (
                 <Button size="sm" className="rounded-full border border-primary/15 bg-primary/95 px-4 text-white shadow-[0_12px_28px_rgba(99,102,241,0.24)] hover:bg-primary/90" asChild>
-                  <a href={localEvent.registrationLink} target="_blank" rel="noopener noreferrer">
+                  <a href={localEvent.registrationLink} target="_blank" rel="noopener noreferrer" onClick={(event) => event.stopPropagation()}>
                     Learn More
                     <ExternalLink className="ml-2 h-3.5 w-3.5" />
                   </a>
@@ -781,10 +806,10 @@ function EventCard({
             </div>
           </div>
 
-          <div className="grid grid-cols-4 gap-1.5 p-2.5 sm:p-3">
+          <div className="grid grid-cols-4 gap-1.5 p-2.5 sm:p-3" onClick={stopCardOpen}>
             <Button
               variant="ghost"
-              className={`h-11 rounded-[1rem] border transition-all ${hasUpvoted ? "border-primary/15 bg-primary/10 text-primary shadow-sm" : "border-transparent text-slate-500 hover:border-slate-200 hover:bg-white hover:text-slate-900"}`}
+              className={`h-11 rounded-[1rem] border transition-all ${hasUpvoted ? "border-primary/15 bg-primary/10 text-primary shadow-sm" : "border-transparent text-slate-500 hover:border-slate-200 hover:bg-white hover:text-slate-900 dark:text-slate-400 dark:hover:border-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-100"}`}
               onClick={handleUpvote}
               disabled={isLoading}
             >
@@ -793,7 +818,7 @@ function EventCard({
             </Button>
             <Button
               variant="ghost"
-              className="h-11 rounded-[1rem] border border-transparent text-slate-500 transition-all hover:border-slate-200 hover:bg-white hover:text-slate-900"
+              className="h-11 rounded-[1rem] border border-transparent text-slate-500 transition-all hover:border-slate-200 hover:bg-white hover:text-slate-900 dark:text-slate-400 dark:hover:border-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-100"
               onClick={() => setShowComments(true)}
             >
               <MessageCircle className="mr-2 h-4 w-4" />
@@ -801,7 +826,7 @@ function EventCard({
             </Button>
             <Button
               variant="ghost"
-              className={`h-11 rounded-[1rem] border transition-all ${hasCalendarSave ? "border-primary/15 bg-primary/10 text-primary shadow-sm" : "border-transparent text-slate-500 hover:border-slate-200 hover:bg-white hover:text-slate-900"}`}
+              className={`h-11 rounded-[1rem] border transition-all ${hasCalendarSave ? "border-primary/15 bg-primary/10 text-primary shadow-sm" : "border-transparent text-slate-500 hover:border-slate-200 hover:bg-white hover:text-slate-900 dark:text-slate-400 dark:hover:border-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-100"}`}
               onClick={handleCalendarSave}
               disabled={isLoading}
               title="Add to calendar"
@@ -811,7 +836,7 @@ function EventCard({
             </Button>
             <Button
               variant="ghost"
-              className="h-11 rounded-[1rem] border border-transparent text-slate-500 transition-all hover:border-slate-200 hover:bg-white hover:text-slate-900"
+              className="h-11 rounded-[1rem] border border-transparent text-slate-500 transition-all hover:border-slate-200 hover:bg-white hover:text-slate-900 dark:text-slate-400 dark:hover:border-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-100"
               onClick={handleShareEvent}
             >
               <Share2 className="mr-2 h-4 w-4" />
@@ -819,22 +844,22 @@ function EventCard({
             </Button>
           </div>
 
-          <div className="px-4 pb-4 sm:px-5 sm:pb-5">
+          <div className="px-4 pb-4 sm:px-5 sm:pb-5" onClick={stopCardOpen}>
             <button
               type="button"
-              className="w-full rounded-[1.2rem] border border-white/70 bg-[linear-gradient(145deg,rgba(248,250,252,0.95),rgba(241,245,249,0.92))] p-3 text-left shadow-[inset_0_1px_0_rgba(255,255,255,0.85)] transition-all hover:border-primary/15 hover:bg-white"
+              className="w-full rounded-[1.2rem] border border-white/70 bg-[linear-gradient(145deg,rgba(248,250,252,0.95),rgba(241,245,249,0.92))] p-3 text-left shadow-[inset_0_1px_0_rgba(255,255,255,0.85)] transition-all hover:border-primary/15 hover:bg-white dark:border-slate-700 dark:bg-[linear-gradient(145deg,rgba(30,41,59,0.9),rgba(15,23,42,0.92))] dark:shadow-none dark:hover:bg-slate-800"
               onClick={() => setShowComments(true)}
             >
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
                     Conversation
                   </p>
-                  <p className="mt-1 text-sm text-slate-900">
+                  <p className="mt-1 text-sm text-slate-900 dark:text-slate-100">
                     {comments.length > 0 ? comments[0]?.text : "Be the first to drop a quick note on this event."}
                   </p>
                 </div>
-                <div className="flex items-center gap-2 rounded-full border border-white/70 bg-white/90 px-3 py-1 text-sm text-slate-500 shadow-sm">
+                <div className="flex items-center gap-2 rounded-full border border-white/70 bg-white/90 px-3 py-1 text-sm text-slate-500 shadow-sm dark:border-slate-700 dark:bg-slate-800/90 dark:text-slate-300 dark:shadow-none">
                   <MessageCircle className="h-4 w-4" />
                   <span>{commentCount}</span>
                 </div>

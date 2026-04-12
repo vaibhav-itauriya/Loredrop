@@ -25,7 +25,6 @@ import {
   Sparkles,
   Trash2,
 } from "lucide-react";
-import FeedHeader from "../feed/_components/FeedHeader.tsx";
 import EventCard from "../feed/_components/EventCard.tsx";
 import { interactionsAPI } from "@/lib/api";
 import { Button } from "@/components/ui/button.tsx";
@@ -274,9 +273,7 @@ export default function CalendarPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[linear-gradient(180deg,#f5f1e8_0%,#fffdf8_18%,hsl(var(--background))_48%)]">
-      <FeedHeader />
-
+    <div className="min-h-screen bg-[linear-gradient(180deg,#f5f1e8_0%,#fffdf8_18%,hsl(var(--background))_48%)] dark:bg-[linear-gradient(180deg,rgba(15,23,42,1)_0%,rgba(17,24,39,0.98)_20%,hsl(var(--background))_52%)]">
       <motion.div
         initial={{ opacity: 0, y: 18 }}
         animate={{ opacity: 1, y: 0 }}
@@ -362,8 +359,8 @@ export default function CalendarPage() {
         ) : (
           <div className="space-y-6">
             <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
-              <Card className="overflow-hidden rounded-[2rem] border-border/60 bg-background/95 shadow-[0_14px_50px_rgba(15,23,42,0.05)]">
-                <div className="border-b border-border/60 bg-[linear-gradient(180deg,rgba(255,248,235,0.95),rgba(255,255,255,0.92))] p-5">
+              <Card className="overflow-hidden rounded-[2rem] border-border/60 bg-background/95 shadow-[0_14px_50px_rgba(15,23,42,0.05)] dark:shadow-[0_14px_50px_rgba(2,6,23,0.32)]">
+                <div className="border-b border-border/60 bg-[linear-gradient(180deg,rgba(255,248,235,0.95),rgba(255,255,255,0.92))] p-5 dark:bg-[linear-gradient(180deg,rgba(30,41,59,0.92),rgba(15,23,42,0.9))]">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
                       <p className="text-sm font-semibold text-foreground">Planner Overview</p>
@@ -515,17 +512,17 @@ export default function CalendarPage() {
 
                   <div className="mt-4 space-y-3">
                     {clashes.length === 0 ? (
-                      <div className="rounded-[1.5rem] border border-emerald-200 bg-emerald-50/70 p-4 text-sm text-emerald-900">
+                      <div className="rounded-[1.5rem] border border-emerald-200 bg-emerald-50/70 p-4 text-sm text-emerald-900 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-100">
                         No weekly clashes detected between your saved events and academic timetable.
                       </div>
                     ) : (
                       clashes.slice(0, 4).map(({ slot, event }) => (
-                        <div key={`${slot.id}-${event.id}`} className="rounded-[1.25rem] border border-amber-200 bg-amber-50/80 p-4">
+                        <div key={`${slot.id}-${event.id}`} className="rounded-[1.25rem] border border-amber-200 bg-amber-50/80 p-4 dark:border-amber-400/30 dark:bg-amber-400/10">
                           <div className="flex items-start gap-3">
-                            <AlertTriangle className="mt-0.5 h-4 w-4 text-amber-700" />
+                            <AlertTriangle className="mt-0.5 h-4 w-4 text-amber-700 dark:text-amber-300" />
                             <div>
-                              <p className="text-sm font-semibold text-amber-950">{event.title} overlaps with {slot.title}</p>
-                              <p className="mt-1 text-sm text-amber-900/80">
+                              <p className="text-sm font-semibold text-amber-950 dark:text-amber-100">{event.title} overlaps with {slot.title}</p>
+                              <p className="mt-1 text-sm text-amber-900/80 dark:text-amber-200/80">
                                 {WEEKDAY_LABELS[slot.day]} {slot.startTime}-{slot.endTime} · {format(new Date(event.dateTime), "h:mm a")}
                               </p>
                             </div>
@@ -540,7 +537,7 @@ export default function CalendarPage() {
 
             <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
               <Card className="overflow-hidden rounded-[2rem] border-border/60 bg-background">
-                <div className="border-b border-border/60 bg-[linear-gradient(180deg,rgba(232,244,255,0.6),rgba(255,255,255,0.95))] p-5">
+                <div className="border-b border-border/60 bg-[linear-gradient(180deg,rgba(232,244,255,0.6),rgba(255,255,255,0.95))] p-5 dark:bg-[linear-gradient(180deg,rgba(30,41,59,0.94),rgba(15,23,42,0.92))]">
                   <div className="flex flex-wrap items-start justify-between gap-4">
                     <div>
                       <p className="text-sm font-semibold text-foreground">Weekly Timetable</p>
@@ -601,7 +598,7 @@ export default function CalendarPage() {
                         {weekGridEvents.map(({ slots, events }, dayIndex) => {
                           const totalHeight = hourLabels.length * 80;
                           return (
-                            <div key={dayIndex} className="relative rounded-[1.5rem] border border-border/60 bg-[linear-gradient(180deg,rgba(248,250,252,0.95),rgba(255,255,255,0.95))]" style={{ height: totalHeight }}>
+                            <div key={dayIndex} className="relative rounded-[1.5rem] border border-border/60 bg-[linear-gradient(180deg,rgba(248,250,252,0.95),rgba(255,255,255,0.95))] dark:bg-[linear-gradient(180deg,rgba(30,41,59,0.95),rgba(15,23,42,0.95))]" style={{ height: totalHeight }}>
                               {hourLabels.map((hour) => (
                                 <div key={hour} className="absolute inset-x-0 border-t border-dashed border-border/50" style={{ top: (hour - visibleStartHour) * 80 }} />
                               ))}
@@ -610,14 +607,14 @@ export default function CalendarPage() {
                                 const top = ((toMinutes(slot.startTime) - visibleStartHour * 60) / 60) * 80;
                                 const height = ((toMinutes(slot.endTime) - toMinutes(slot.startTime)) / 60) * 80;
                                 return (
-                                  <div key={slot.id} className="absolute left-2 right-2 overflow-hidden rounded-2xl border border-sky-200 bg-sky-100/90 p-2 text-xs shadow-sm" style={{ top, height }}>
+                                  <div key={slot.id} className="absolute left-2 right-2 overflow-hidden rounded-2xl border border-sky-200 bg-sky-100/90 p-2 text-xs shadow-sm dark:border-sky-400/30 dark:bg-sky-400/12" style={{ top, height }}>
                                     <div className="flex items-start justify-between gap-2">
                                       <div>
-                                        <p className="font-semibold text-sky-950">{slot.title}</p>
-                                        <p className="mt-1 text-sky-900/70">{slot.startTime}-{slot.endTime}</p>
-                                        {slot.location && <p className="mt-1 truncate text-sky-900/65">{slot.location}</p>}
+                                        <p className="font-semibold text-sky-950 dark:text-sky-100">{slot.title}</p>
+                                        <p className="mt-1 text-sky-900/70 dark:text-sky-100/75">{slot.startTime}-{slot.endTime}</p>
+                                        {slot.location && <p className="mt-1 truncate text-sky-900/65 dark:text-sky-100/70">{slot.location}</p>}
                                       </div>
-                                      <GraduationCap className="h-3.5 w-3.5 shrink-0 text-sky-700" />
+                                      <GraduationCap className="h-3.5 w-3.5 shrink-0 text-sky-700 dark:text-sky-300" />
                                     </div>
                                   </div>
                                 );
@@ -630,14 +627,14 @@ export default function CalendarPage() {
                                 const height = (((end.getHours() * 60 + end.getMinutes()) - (start.getHours() * 60 + start.getMinutes())) / 60) * 80;
                                 const hasClash = clashes.some((item) => item.event.id === event.id && item.slot.day === dayIndex);
                                 return (
-                                  <div key={event.id} className={`absolute left-6 right-2 overflow-hidden rounded-2xl border p-2 text-xs shadow-sm ${hasClash ? "border-amber-300 bg-amber-100/92" : "border-orange-200 bg-orange-100/92"}`} style={{ top, height: Math.max(height, 48) }}>
+                                  <div key={event.id} className={`absolute left-6 right-2 overflow-hidden rounded-2xl border p-2 text-xs shadow-sm ${hasClash ? "border-amber-300 bg-amber-100/92 dark:border-amber-400/30 dark:bg-amber-400/12" : "border-orange-200 bg-orange-100/92 dark:border-orange-400/30 dark:bg-orange-400/12"}`} style={{ top, height: Math.max(height, 48) }}>
                                     <div className="flex items-start justify-between gap-2">
                                       <div className="min-w-0">
-                                        <p className="truncate font-semibold text-slate-950">{event.title}</p>
-                                        <p className="mt-1 truncate text-slate-700">{format(start, "h:mm a")} - {format(end, "h:mm a")}</p>
-                                        <p className="truncate text-slate-600">{event.organizationName}</p>
+                                        <p className="truncate font-semibold text-slate-950 dark:text-slate-100">{event.title}</p>
+                                        <p className="mt-1 truncate text-slate-700 dark:text-slate-200/80">{format(start, "h:mm a")} - {format(end, "h:mm a")}</p>
+                                        <p className="truncate text-slate-600 dark:text-slate-300/75">{event.organizationName}</p>
                                       </div>
-                                      {hasClash && <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-700" />}
+                                      {hasClash && <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-700 dark:text-amber-300" />}
                                     </div>
                                   </div>
                                 );

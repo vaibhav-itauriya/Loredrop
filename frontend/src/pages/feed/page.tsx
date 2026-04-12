@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useDeferredValue } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { motion } from "motion/react";
 import FeedHeader from "./_components/FeedHeader.tsx";
@@ -10,6 +10,7 @@ import { EventFilters, type FilterOptions } from "@/components/EventFilters.tsx"
 import { Skeleton } from "@/components/ui/skeleton.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import { Badge } from "@/components/ui/badge.tsx";
+import { Dialog, DialogContent } from "@/components/ui/dialog.tsx";
 import {
   Empty,
   EmptyHeader,
@@ -17,7 +18,7 @@ import {
   EmptyTitle,
   EmptyDescription,
 } from "@/components/ui/empty.tsx";
-import { Calendar, Loader2 } from "lucide-react";
+import { Calendar, Loader2, Search, X } from "lucide-react";
 import { eventsAPI, organizationsAPI } from "@/lib/api";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth.ts";
@@ -28,7 +29,7 @@ export default function FeedPage() {
   const { isAuthenticated } = useAuth();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const scrollToEventId = searchParams.get("event");
+  const openEventId = searchParams.get("event");
   const [hasRestoredState, setHasRestoredState] = useState(false);
   const [selectedOrgId, setSelectedOrgId] = useState<string | null>(null);
   const [feedMode, setFeedMode] = useState<"forYou" | "subscribed" | "trending" | "upcoming">("forYou");
@@ -42,6 +43,9 @@ export default function FeedPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [canLoadMore, setCanLoadMore] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const deferredSearchQuery = useDeferredValue(searchQuery);
+  const hasSearchQuery = deferredSearchQuery.trim().length > 0;
 
   const isForYouSelected = feedMode === "forYou";
   const isSubscribedSelected = feedMode === "subscribed";
@@ -63,6 +67,7 @@ export default function FeedPage() {
       if (parsed?.feedMode) setFeedMode(parsed.feedMode);
       if (parsed?.selectedOrgId) setSelectedOrgId(parsed.selectedOrgId);
       if (parsed?.filters) setFilters(parsed.filters);
+      if (parsed?.searchQuery) setSearchQuery(parsed.searchQuery);
     } catch (error) {
       console.error("Failed to restore feed state:", error);
     } finally {
@@ -74,18 +79,21 @@ export default function FeedPage() {
     if (!hasRestoredState) return;
     localStorage.setItem(
       FEED_STATE_KEY,
-      JSON.stringify({ feedMode, selectedOrgId, filters })
+      JSON.stringify({ feedMode, selectedOrgId, filters, searchQuery })
     );
-  }, [feedMode, filters, hasRestoredState, selectedOrgId]);
+  }, [feedMode, filters, hasRestoredState, searchQuery, selectedOrgId]);
 
   const activeOrganizationIds = useMemo(() => {
+    if (hasSearchQuery) {
+      return [];
+    }
     if (isSubscribedSelected && isAuthenticated) {
       return subscribedOrgIds;
     }
     const selected = selectedOrgId ? [selectedOrgId] : [];
     const extra = filters.organizations || [];
     return Array.from(new Set([...selected, ...extra]));
-  }, [filters.organizations, isAuthenticated, isSubscribedSelected, selectedOrgId, subscribedOrgIds]);
+  }, [filters.organizations, hasSearchQuery, isAuthenticated, isSubscribedSelected, selectedOrgId, subscribedOrgIds]);
 
   useEffect(() => {
     let cancelled = false;
@@ -194,9 +202,10 @@ export default function FeedPage() {
       try {
         const data = await eventsAPI.getFeed(1, 10, undefined, {
           organizationIds: activeOrganizationIds,
-          eventMode: filters.eventMode,
-          audience: filters.audience,
-          dateRange: filters.dateRange,
+          eventMode: hasSearchQuery ? undefined : filters.eventMode,
+          audience: hasSearchQuery ? undefined : filters.audience,
+          dateRange: hasSearchQuery ? undefined : filters.dateRange,
+          q: deferredSearchQuery,
         });
         if (!cancelled) {
           const list = Array.isArray(data?.data) ? data.data : [];
@@ -219,20 +228,17 @@ export default function FeedPage() {
     return () => {
       cancelled = true;
     };
-  }, [activeOrganizationIds, filters.audience, filters.dateRange, filters.eventMode]);
+  }, [activeOrganizationIds, deferredSearchQuery, filters.audience, filters.dateRange, filters.eventMode, hasSearchQuery]);
 
-  useEffect(() => {
-    if (scrollToEventId && !isLoading) {
-      const timer = setTimeout(() => {
-        const el = document.querySelector(`[data-event-id="${scrollToEventId}"]`);
-        if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
-        const next = new URLSearchParams(searchParams);
-        next.delete("event");
-        setSearchParams(next.toString() ? next : {}, { replace: true });
-      }, 400);
-      return () => clearTimeout(timer);
-    }
-  }, [scrollToEventId, isLoading, searchParams, setSearchParams]);
+  const allKnownEvents = useMemo(() => {
+    const merged = [...events, ...upcomingEvents, ...recommendedEvents];
+    return Array.from(new Map(merged.map((event) => [String(event._id), event])).values());
+  }, [events, upcomingEvents, recommendedEvents]);
+
+  const activeDialogEvent = useMemo(() => {
+    if (!openEventId) return null;
+    return allKnownEvents.find((event) => String(event._id) === String(openEventId)) || null;
+  }, [allKnownEvents, openEventId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -257,9 +263,10 @@ export default function FeedPage() {
       const nextPage = page + 1;
       const data = await eventsAPI.getFeed(nextPage, 10, undefined, {
         organizationIds: activeOrganizationIds,
-        eventMode: filters.eventMode,
-        audience: filters.audience,
-        dateRange: filters.dateRange,
+        eventMode: hasSearchQuery ? undefined : filters.eventMode,
+        audience: hasSearchQuery ? undefined : filters.audience,
+        dateRange: hasSearchQuery ? undefined : filters.dateRange,
+        q: deferredSearchQuery,
       });
       const nextBatch = Array.isArray(data?.data) ? data.data : [];
       setEvents((prev) => [...prev, ...nextBatch]);
@@ -271,7 +278,7 @@ export default function FeedPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [activeOrganizationIds, filters.audience, filters.dateRange, filters.eventMode, isLoading, page]);
+  }, [activeOrganizationIds, deferredSearchQuery, filters.audience, filters.dateRange, filters.eventMode, hasSearchQuery, isLoading, page]);
 
   const activeFilterCount = useMemo(
     () =>
@@ -369,10 +376,27 @@ export default function FeedPage() {
     [events]
   );
 
+  const matchedOrganizations = useMemo(() => {
+    const query = deferredSearchQuery.trim().toLowerCase();
+    if (!query) return [];
+    return organizations
+      .filter((organization) => organization.name?.toLowerCase().includes(query))
+      .slice(0, 5);
+  }, [deferredSearchQuery, organizations]);
+
   const resetFeedView = useCallback(() => {
     setFeedMode("forYou");
     setSelectedOrgId(null);
     setFilters({});
+    setSearchQuery("");
+  }, []);
+
+  const handleSearchChange = useCallback((value: string) => {
+    setSearchQuery(value);
+    if (value.trim()) {
+      setFeedMode("forYou");
+      setSelectedOrgId(null);
+    }
   }, []);
 
   const handleOpenOrganizationPage = useCallback(
@@ -387,17 +411,43 @@ export default function FeedPage() {
     [navigate, organizations],
   );
 
+  const handleOpenUpcomingEvent = useCallback(
+    (eventId: string) => {
+      setFeedMode("forYou");
+      setSelectedOrgId(null);
+      setSearchParams({ event: eventId });
+    },
+    [setSearchParams],
+  );
+
+  const handleOpenPostDialog = useCallback(
+    (event: any) => {
+      setSearchParams({ event: String(event._id) });
+    },
+    [setSearchParams],
+  );
+
+  const handleDialogOpenChange = useCallback(
+    (open: boolean) => {
+      if (open) return;
+      const next = new URLSearchParams(searchParams);
+      next.delete("event");
+      setSearchParams(next.toString() ? next : {}, { replace: true });
+    },
+    [searchParams, setSearchParams],
+  );
+
   return (
-    <div className="relative min-h-screen overflow-hidden bg-[radial-gradient(circle_at_top_left,rgba(252,211,77,0.18),transparent_24%),radial-gradient(circle_at_top_right,rgba(59,130,246,0.18),transparent_28%),radial-gradient(circle_at_50%_18%,rgba(45,212,191,0.1),transparent_24%),linear-gradient(180deg,#fcfcfd_0%,#f6f8fb_48%,#eef2f7_100%)]">
+    <div className="relative min-h-screen overflow-hidden bg-[radial-gradient(circle_at_top_left,rgba(252,211,77,0.18),transparent_24%),radial-gradient(circle_at_top_right,rgba(59,130,246,0.18),transparent_28%),radial-gradient(circle_at_50%_18%,rgba(45,212,191,0.1),transparent_24%),linear-gradient(180deg,#fcfcfd_0%,#f6f8fb_48%,#eef2f7_100%)] dark:bg-[radial-gradient(circle_at_top_left,rgba(245,158,11,0.12),transparent_22%),radial-gradient(circle_at_top_right,rgba(96,165,250,0.14),transparent_26%),radial-gradient(circle_at_50%_18%,rgba(20,184,166,0.08),transparent_20%),linear-gradient(180deg,#020617_0%,#0f172a_42%,#111827_100%)]">
       <motion.div
         aria-hidden="true"
-        className="pointer-events-none absolute -left-24 top-24 h-72 w-72 rounded-full bg-[radial-gradient(circle,rgba(255,255,255,0.85),rgba(255,255,255,0))] blur-3xl"
+        className="pointer-events-none absolute -left-24 top-24 h-72 w-72 rounded-full bg-[radial-gradient(circle,rgba(255,255,255,0.85),rgba(255,255,255,0))] blur-3xl dark:bg-[radial-gradient(circle,rgba(96,165,250,0.18),rgba(96,165,250,0))]"
         animate={{ x: [0, 28, 0], y: [0, -14, 0], opacity: [0.45, 0.75, 0.45] }}
         transition={{ duration: 13, repeat: Infinity, ease: "easeInOut" }}
       />
       <motion.div
         aria-hidden="true"
-        className="pointer-events-none absolute right-[-5rem] top-[18rem] h-80 w-80 rounded-full bg-[radial-gradient(circle,rgba(99,102,241,0.15),rgba(99,102,241,0))] blur-3xl"
+        className="pointer-events-none absolute right-[-5rem] top-[18rem] h-80 w-80 rounded-full bg-[radial-gradient(circle,rgba(99,102,241,0.15),rgba(99,102,241,0))] blur-3xl dark:bg-[radial-gradient(circle,rgba(129,140,248,0.16),rgba(129,140,248,0))]"
         animate={{ x: [0, -24, 0], y: [0, 18, 0], opacity: [0.4, 0.7, 0.4] }}
         transition={{ duration: 15, repeat: Infinity, ease: "easeInOut" }}
       />
@@ -435,7 +485,7 @@ export default function FeedPage() {
             <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
               <Button
                 variant={isForYouSelected ? "default" : "outline"}
-                className="rounded-full border-white/50 bg-white/80 shadow-[0_8px_24px_rgba(15,23,42,0.08)] backdrop-blur"
+                className="rounded-full border-white/50 bg-white/80 shadow-[0_8px_24px_rgba(15,23,42,0.08)] backdrop-blur dark:border-slate-700/70 dark:bg-slate-900/70 dark:shadow-[0_8px_24px_rgba(2,6,23,0.26)]"
                 onClick={() => {
                   setFeedMode("forYou");
                   setSelectedOrgId(null);
@@ -445,7 +495,7 @@ export default function FeedPage() {
               </Button>
               <Button
                 variant={isSubscribedSelected ? "default" : "outline"}
-                className="rounded-full border-white/50 bg-white/80 shadow-[0_8px_24px_rgba(15,23,42,0.08)] backdrop-blur"
+                className="rounded-full border-white/50 bg-white/80 shadow-[0_8px_24px_rgba(15,23,42,0.08)] backdrop-blur dark:border-slate-700/70 dark:bg-slate-900/70 dark:shadow-[0_8px_24px_rgba(2,6,23,0.26)]"
                 onClick={() => {
                   setFeedMode("subscribed");
                   setSelectedOrgId(null);
@@ -455,7 +505,7 @@ export default function FeedPage() {
               </Button>
               <Button
                 variant={isTrendingSelected ? "default" : "outline"}
-                className="rounded-full border-white/50 bg-white/80 shadow-[0_8px_24px_rgba(15,23,42,0.08)] backdrop-blur"
+                className="rounded-full border-white/50 bg-white/80 shadow-[0_8px_24px_rgba(15,23,42,0.08)] backdrop-blur dark:border-slate-700/70 dark:bg-slate-900/70 dark:shadow-[0_8px_24px_rgba(2,6,23,0.26)]"
                 onClick={() => {
                   setFeedMode("trending");
                   setSelectedOrgId(null);
@@ -465,7 +515,7 @@ export default function FeedPage() {
               </Button>
               <Button
                 variant={isUpcomingSelected ? "default" : "outline"}
-                className="rounded-full border-white/50 bg-white/80 shadow-[0_8px_24px_rgba(15,23,42,0.08)] backdrop-blur"
+                className="rounded-full border-white/50 bg-white/80 shadow-[0_8px_24px_rgba(15,23,42,0.08)] backdrop-blur dark:border-slate-700/70 dark:bg-slate-900/70 dark:shadow-[0_8px_24px_rgba(2,6,23,0.26)]"
                 onClick={() => {
                   setFeedMode("upcoming");
                   setSelectedOrgId(null);
@@ -477,7 +527,7 @@ export default function FeedPage() {
                 <Button
                   key={org._id}
                   variant={selectedOrgId === org._id && isForYouSelected ? "default" : "outline"}
-                  className="rounded-full border-white/50 bg-white/80 shadow-[0_8px_24px_rgba(15,23,42,0.08)] backdrop-blur"
+                  className="rounded-full border-white/50 bg-white/80 shadow-[0_8px_24px_rgba(15,23,42,0.08)] backdrop-blur dark:border-slate-700/70 dark:bg-slate-900/70 dark:shadow-[0_8px_24px_rgba(2,6,23,0.26)]"
                   onClick={() => {
                     setFeedMode("forYou");
                     setSelectedOrgId(org._id);
@@ -518,7 +568,7 @@ export default function FeedPage() {
               <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-[0.24em] text-muted-foreground">Refine results</p>
-                  <h2 className="mt-1 text-xl font-semibold text-slate-900">
+                  <h2 className="mt-1 text-xl font-semibold text-slate-900 dark:text-slate-100">
                     {isTrendingSelected
                       ? "Trending across campus"
                       : isUpcomingSelected
@@ -529,7 +579,12 @@ export default function FeedPage() {
                   </h2>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
-                  <Badge variant="secondary" className="w-fit rounded-full border border-white/60 bg-white/70 px-3 py-1 text-slate-700 shadow-[0_8px_18px_rgba(15,23,42,0.06)]">
+                  {deferredSearchQuery.trim() && (
+                    <Badge variant="secondary" className="w-fit rounded-full border border-white/60 bg-white/70 px-3 py-1 text-slate-700 shadow-[0_8px_18px_rgba(15,23,42,0.06)] dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-200 dark:shadow-[0_8px_18px_rgba(2,6,23,0.24)]">
+                      Search: {deferredSearchQuery.trim()}
+                    </Badge>
+                  )}
+                  <Badge variant="secondary" className="w-fit rounded-full border border-white/60 bg-white/70 px-3 py-1 text-slate-700 shadow-[0_8px_18px_rgba(15,23,42,0.06)] dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-200 dark:shadow-[0_8px_18px_rgba(2,6,23,0.24)]">
                     {isTrendingSelected
                       ? "Trending"
                       : isUpcomingSelected
@@ -539,31 +594,74 @@ export default function FeedPage() {
                       : "For You"}
                   </Badge>
                   {activeFilterCount > 0 && (
-                    <Badge variant="secondary" className="w-fit rounded-full border border-white/60 bg-white/70 px-3 py-1 text-slate-700 shadow-[0_8px_18px_rgba(15,23,42,0.06)]">
+                    <Badge variant="secondary" className="w-fit rounded-full border border-white/60 bg-white/70 px-3 py-1 text-slate-700 shadow-[0_8px_18px_rgba(15,23,42,0.06)] dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-200 dark:shadow-[0_8px_18px_rgba(2,6,23,0.24)]">
                       {activeFilterCount} active
                     </Badge>
                   )}
                   {(selectedOrgId || activeFilterCount > 0 || feedMode !== "forYou") && (
-                    <Button variant="outline" size="sm" className="rounded-full border-white/60 bg-white/80 shadow-[0_8px_18px_rgba(15,23,42,0.06)]" onClick={resetFeedView}>
+                    <Button variant="outline" size="sm" className="rounded-full border-white/60 bg-white/80 shadow-[0_8px_18px_rgba(15,23,42,0.06)] dark:border-slate-700 dark:bg-slate-900/80 dark:shadow-[0_8px_18px_rgba(2,6,23,0.24)]" onClick={resetFeedView}>
                       Reset Feed
                     </Button>
                   )}
                 </div>
               </div>
-              <div className="overflow-x-auto rounded-[1.75rem] border border-white/65 bg-[linear-gradient(135deg,rgba(255,255,255,0.94),rgba(248,250,252,0.88))] px-4 py-4 shadow-[0_18px_50px_rgba(15,23,42,0.08)] backdrop-blur-xl sm:overflow-visible">
-                <EventFilters
-                  onFilterChange={setFilters}
-                  currentFilters={filters}
-                  organizations={organizations}
-                  variant="inline"
-                />
+              <div className="overflow-x-auto rounded-[1.75rem] border border-white/65 bg-[linear-gradient(135deg,rgba(255,255,255,0.94),rgba(248,250,252,0.88))] px-4 py-4 shadow-[0_18px_50px_rgba(15,23,42,0.08)] backdrop-blur-xl sm:overflow-visible dark:border-slate-700/70 dark:bg-[linear-gradient(135deg,rgba(15,23,42,0.9),rgba(30,41,59,0.88))] dark:shadow-[0_18px_50px_rgba(2,6,23,0.3)]">
+                <div className="flex flex-col gap-3">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <label className="relative block w-full sm:max-w-md">
+                      <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                      <input
+                        value={searchQuery}
+                        onChange={(event) => handleSearchChange(event.target.value)}
+                        placeholder="Search events, tags, venues, or organizations"
+                        className="h-11 w-full rounded-full border border-border/60 bg-background/85 pl-10 pr-11 text-sm text-foreground shadow-sm outline-none transition focus:border-primary/40 focus:ring-2 focus:ring-primary/15 dark:bg-slate-950/60"
+                      />
+                      {searchQuery ? (
+                        <button
+                          type="button"
+                          onClick={() => handleSearchChange("")}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full p-1 text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                          aria-label="Clear search"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      ) : null}
+                    </label>
+                    <p className="text-xs text-muted-foreground">
+                      Search spans all feed posts by title, description, tags, venue, and organization name.
+                    </p>
+                  </div>
+                  {hasSearchQuery && matchedOrganizations.length > 0 && (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="text-xs font-medium text-muted-foreground">Matching organizations:</p>
+                      {matchedOrganizations.map((organization) => (
+                        <Button
+                          key={organization._id}
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="rounded-full"
+                          onClick={() => handleOpenOrganizationPage(String(organization._id))}
+                        >
+                          {organization.name}
+                        </Button>
+                      ))}
+                    </div>
+                  )}
+                  <EventFilters
+                    onFilterChange={setFilters}
+                    currentFilters={filters}
+                    organizations={organizations}
+                    variant="inline"
+                  />
+                </div>
               </div>
             </motion.div>
 
             {isLoading && (
               <div className="space-y-6">
                 {Array.from({ length: 3 }).map((_, i) => (
-                  <div key={i} className="overflow-hidden rounded-[1.75rem] border border-white/60 bg-white/90 shadow-[0_18px_50px_rgba(15,23,42,0.08)] backdrop-blur">
+                  <div key={i} className="overflow-hidden rounded-[1.75rem] border border-white/60 bg-white/90 shadow-[0_18px_50px_rgba(15,23,42,0.08)] backdrop-blur dark:border-slate-700/70 dark:bg-slate-900/88 dark:shadow-[0_18px_50px_rgba(2,6,23,0.3)]">
                     <Skeleton className="aspect-square w-full" />
                     <div className="space-y-3 p-5">
                       <div className="flex items-center gap-2">
@@ -587,7 +685,9 @@ export default function FeedPage() {
                   </EmptyMedia>
                     <EmptyTitle>No events found</EmptyTitle>
                   <EmptyDescription>
-                    {isSubscribedSelected && isAuthenticated
+                    {hasSearchQuery
+                      ? "No posts matched this search. Try a broader keyword, or open one of the matching organizations above."
+                      : isSubscribedSelected && isAuthenticated
                       ? "Subscribe to organizations from any post to fill your subscribed feed."
                       : isForYouSelected && isAuthenticated
                       ? "For You is your campus-wide discovery feed. Subscribe to organizations to also build your Subscribed feed."
@@ -606,7 +706,7 @@ export default function FeedPage() {
                     <motion.div
                       whileHover={{ y: -4 }}
                       transition={{ duration: 0.22 }}
-                      className="rounded-[1.75rem] border border-white/65 bg-[radial-gradient(circle_at_top_left,rgba(250,204,21,0.15),transparent_42%),linear-gradient(145deg,rgba(255,255,255,0.96),rgba(248,250,252,0.92))] p-5 shadow-[0_18px_50px_rgba(15,23,42,0.08)] backdrop-blur"
+                      className="rounded-[1.75rem] border border-white/65 bg-[radial-gradient(circle_at_top_left,rgba(250,204,21,0.15),transparent_42%),linear-gradient(145deg,rgba(255,255,255,0.96),rgba(248,250,252,0.92))] p-5 shadow-[0_18px_50px_rgba(15,23,42,0.08)] backdrop-blur dark:border-slate-700/70 dark:bg-[radial-gradient(circle_at_top_left,rgba(245,158,11,0.12),transparent_42%),linear-gradient(145deg,rgba(15,23,42,0.96),rgba(30,41,59,0.92))] dark:shadow-[0_18px_50px_rgba(2,6,23,0.3)]"
                     >
                       <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Discovery</p>
                       <h3 className="mt-1 text-lg font-semibold">Trending organizations</h3>
@@ -615,7 +715,7 @@ export default function FeedPage() {
                           <button
                             key={orgId}
                             type="button"
-                            className="flex w-full items-center justify-between rounded-2xl border border-transparent bg-white/70 px-4 py-3 text-left shadow-[inset_0_1px_0_rgba(255,255,255,0.8)] transition-colors hover:border-primary/20 hover:bg-primary/5"
+                            className="flex w-full items-center justify-between rounded-2xl border border-transparent bg-white/70 px-4 py-3 text-left shadow-[inset_0_1px_0_rgba(255,255,255,0.8)] transition-colors hover:border-primary/20 hover:bg-primary/5 dark:bg-slate-900/60 dark:shadow-none dark:hover:bg-primary/10"
                             onClick={() => {
                               setFeedMode("forYou");
                               setSelectedOrgId(orgId);
@@ -636,19 +736,19 @@ export default function FeedPage() {
                     <motion.div
                       whileHover={{ y: -4 }}
                       transition={{ duration: 0.22 }}
-                      className="rounded-[1.75rem] border border-white/65 bg-[radial-gradient(circle_at_top_right,rgba(96,165,250,0.16),transparent_40%),linear-gradient(145deg,rgba(255,255,255,0.96),rgba(248,250,252,0.92))] p-5 shadow-[0_18px_50px_rgba(15,23,42,0.08)] backdrop-blur"
+                      className="rounded-[1.75rem] border border-white/65 bg-[radial-gradient(circle_at_top_right,rgba(96,165,250,0.16),transparent_40%),linear-gradient(145deg,rgba(255,255,255,0.96),rgba(248,250,252,0.92))] p-5 shadow-[0_18px_50px_rgba(15,23,42,0.08)] backdrop-blur dark:border-slate-700/70 dark:bg-[radial-gradient(circle_at_top_right,rgba(96,165,250,0.12),transparent_40%),linear-gradient(145deg,rgba(15,23,42,0.96),rgba(30,41,59,0.92))] dark:shadow-[0_18px_50px_rgba(2,6,23,0.3)]"
                     >
                       <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Next Moves</p>
                       <h3 className="mt-1 text-lg font-semibold">What to check next</h3>
                       <div className="mt-4 space-y-3">
                         {todayEvents.length > 0 && (
-                          <div className="rounded-2xl bg-white/70 px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)]">
+                          <div className="rounded-2xl bg-white/70 px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)] dark:bg-slate-900/60 dark:shadow-none">
                             <p className="text-sm font-medium">Happening today</p>
                             <p className="text-xs text-muted-foreground">{todayEvents.length} events are live on campus today</p>
                           </div>
                         )}
                         {registrationSoonEvents.length > 0 && (
-                          <div className="rounded-2xl bg-white/70 px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)]">
+                          <div className="rounded-2xl bg-white/70 px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)] dark:bg-slate-900/60 dark:shadow-none">
                             <p className="text-sm font-medium">Registration closing soon</p>
                             <p className="text-xs text-muted-foreground">
                               {registrationSoonEvents[0].title} and {Math.max(0, registrationSoonEvents.length - 1)} more are coming up soon
@@ -656,7 +756,7 @@ export default function FeedPage() {
                           </div>
                         )}
                         {isAuthenticated && recommendedEvents.length > 0 && (
-                          <div className="rounded-2xl bg-white/70 px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)]">
+                          <div className="rounded-2xl bg-white/70 px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)] dark:bg-slate-900/60 dark:shadow-none">
                             <p className="text-sm font-medium">Because you subscribed to similar orgs</p>
                             <p className="text-xs text-muted-foreground">
                               {recommendedEvents[0].title} is recommended based on your branch and engagement
@@ -670,7 +770,7 @@ export default function FeedPage() {
 
                 {isSubscribedSelected && isAuthenticated && (
                   <section className="space-y-4">
-                    <div className="rounded-[1.75rem] border border-white/65 bg-[radial-gradient(circle_at_top_left,rgba(255,189,89,0.22),transparent_42%),linear-gradient(135deg,rgba(255,255,255,0.96),rgba(255,247,237,0.88))] p-5 shadow-[0_22px_60px_rgba(249,115,22,0.1)] backdrop-blur">
+                    <div className="rounded-[1.75rem] border border-white/65 bg-[radial-gradient(circle_at_top_left,rgba(255,189,89,0.22),transparent_42%),linear-gradient(135deg,rgba(255,255,255,0.96),rgba(255,247,237,0.88))] p-5 shadow-[0_22px_60px_rgba(249,115,22,0.1)] backdrop-blur dark:border-slate-700/70 dark:bg-[radial-gradient(circle_at_top_left,rgba(249,115,22,0.12),transparent_42%),linear-gradient(135deg,rgba(15,23,42,0.96),rgba(30,41,59,0.92))] dark:shadow-[0_22px_60px_rgba(2,6,23,0.32)]">
                       <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Subscribed Feed</p>
                       <h3 className="mt-1 text-xl font-semibold">Posts from organizations you subscribed to</h3>
                       <p className="mt-1 text-sm text-muted-foreground">
@@ -691,7 +791,7 @@ export default function FeedPage() {
 
                 {isForYouSelected && (
                   <section className="space-y-4">
-                    <div className="rounded-[1.75rem] border border-white/65 bg-[radial-gradient(circle_at_top_left,rgba(129,140,248,0.18),transparent_42%),linear-gradient(135deg,rgba(255,255,255,0.96),rgba(243,244,255,0.88))] p-5 shadow-[0_22px_60px_rgba(99,102,241,0.1)] backdrop-blur">
+                    <div className="rounded-[1.75rem] border border-white/65 bg-[radial-gradient(circle_at_top_left,rgba(129,140,248,0.18),transparent_42%),linear-gradient(135deg,rgba(255,255,255,0.96),rgba(243,244,255,0.88))] p-5 shadow-[0_22px_60px_rgba(99,102,241,0.1)] backdrop-blur dark:border-slate-700/70 dark:bg-[radial-gradient(circle_at_top_left,rgba(129,140,248,0.12),transparent_42%),linear-gradient(135deg,rgba(15,23,42,0.96),rgba(30,41,59,0.92))] dark:shadow-[0_22px_60px_rgba(2,6,23,0.32)]">
                       <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">For You</p>
                       <h3 className="mt-1 text-xl font-semibold">Campus-wide discovery feed</h3>
                       <p className="mt-1 text-sm text-muted-foreground">
@@ -702,14 +802,14 @@ export default function FeedPage() {
                 )}
 
                 {isTrendingSelected && trendingEvents.length > 0 && (
-                  <section className="rounded-[1.75rem] border border-white/65 bg-[linear-gradient(145deg,rgba(255,255,255,0.95),rgba(248,250,252,0.9))] p-5 shadow-[0_18px_50px_rgba(15,23,42,0.08)] backdrop-blur">
+                  <section className="rounded-[1.75rem] border border-white/65 bg-[linear-gradient(145deg,rgba(255,255,255,0.95),rgba(248,250,252,0.9))] p-5 shadow-[0_18px_50px_rgba(15,23,42,0.08)] backdrop-blur dark:border-slate-700/70 dark:bg-[linear-gradient(145deg,rgba(15,23,42,0.96),rgba(30,41,59,0.9))] dark:shadow-[0_18px_50px_rgba(2,6,23,0.3)]">
                     <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Trending Events</p>
                     <div className="mt-4 grid gap-3 md:grid-cols-2">
                       {trendingEvents.map((event) => (
                         <button
                           key={event._id}
                           type="button"
-                          className="rounded-2xl border border-white/55 bg-white/75 px-4 py-3 text-left shadow-[inset_0_1px_0_rgba(255,255,255,0.85)] transition-colors hover:border-primary/20 hover:bg-primary/5"
+                          className="rounded-2xl border border-white/55 bg-white/75 px-4 py-3 text-left shadow-[inset_0_1px_0_rgba(255,255,255,0.85)] transition-colors hover:border-primary/20 hover:bg-primary/5 dark:border-slate-700 dark:bg-slate-900/65 dark:shadow-none dark:hover:bg-primary/10"
                           onClick={() => {
                             setFeedMode("forYou");
                             setSelectedOrgId(null);
@@ -727,14 +827,14 @@ export default function FeedPage() {
                 )}
 
                 {isUpcomingSelected && upcomingEvents.length > 0 && (
-                  <section className="rounded-[1.75rem] border border-white/65 bg-[linear-gradient(145deg,rgba(255,255,255,0.95),rgba(248,250,252,0.9))] p-5 shadow-[0_18px_50px_rgba(15,23,42,0.08)] backdrop-blur">
+                  <section className="rounded-[1.75rem] border border-white/65 bg-[linear-gradient(145deg,rgba(255,255,255,0.95),rgba(248,250,252,0.9))] p-5 shadow-[0_18px_50px_rgba(15,23,42,0.08)] backdrop-blur dark:border-slate-700/70 dark:bg-[linear-gradient(145deg,rgba(15,23,42,0.96),rgba(30,41,59,0.9))] dark:shadow-[0_18px_50px_rgba(2,6,23,0.3)]">
                     <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Upcoming Highlights</p>
                     <div className="mt-4 grid gap-3 md:grid-cols-2">
                       {upcomingEvents.slice(0, 4).map((event: any) => (
                         <button
                           key={event._id}
                           type="button"
-                          className="rounded-2xl border border-white/55 bg-white/75 px-4 py-3 text-left shadow-[inset_0_1px_0_rgba(255,255,255,0.85)] transition-colors hover:border-primary/20 hover:bg-primary/5"
+                          className="rounded-2xl border border-white/55 bg-white/75 px-4 py-3 text-left shadow-[inset_0_1px_0_rgba(255,255,255,0.85)] transition-colors hover:border-primary/20 hover:bg-primary/5 dark:border-slate-700 dark:bg-slate-900/65 dark:shadow-none dark:hover:bg-primary/10"
                           onClick={() => setSearchParams({ event: event._id })}
                         >
                           <p className="font-medium">{event.title}</p>
@@ -759,13 +859,14 @@ export default function FeedPage() {
                       adminOrgIds={adminOrgIds}
                       isSubscribed={subscribedOrgIds.includes(String(event.organizationId?._id || event.organizationId))}
                       onSubscriptionChange={handleSubscriptionChange}
+                      onOpenPost={handleOpenPostDialog}
                     />
                   </motion.div>
                 ))}
 
                 {canLoadMore && (
                   <div className="flex justify-center pt-4">
-                    <Button variant="secondary" onClick={handleLoadMore} className="rounded-full border border-white/60 bg-white/80 px-5 shadow-[0_12px_30px_rgba(15,23,42,0.08)] backdrop-blur">
+                    <Button variant="secondary" onClick={handleLoadMore} className="rounded-full border border-white/60 bg-white/80 px-5 shadow-[0_12px_30px_rgba(15,23,42,0.08)] backdrop-blur dark:border-slate-700 dark:bg-slate-900/80 dark:shadow-[0_12px_30px_rgba(2,6,23,0.28)]">
                       <Loader2 className="mr-2 h-4 w-4" />
                       Load More Events
                     </Button>
@@ -776,7 +877,7 @@ export default function FeedPage() {
 
             <div className="mt-6 space-y-4 xl:hidden">
               <PersonalCalendarCard />
-              <UpcomingEventsSidebar events={upcomingEvents} />
+              <UpcomingEventsSidebar events={upcomingEvents} onOpenEvent={handleOpenUpcomingEvent} />
             </div>
           </main>
 
@@ -788,11 +889,24 @@ export default function FeedPage() {
               className="h-full space-y-5 overflow-y-auto pr-1 no-scrollbar"
             >
               <PersonalCalendarCard />
-              <UpcomingEventsSidebar events={upcomingEvents} />
+              <UpcomingEventsSidebar events={upcomingEvents} onOpenEvent={handleOpenUpcomingEvent} />
             </motion.div>
           </aside>
         </div>
       </div>
+      <Dialog open={!!activeDialogEvent} onOpenChange={handleDialogOpenChange}>
+        <DialogContent className="max-h-[92vh] max-w-5xl overflow-y-auto border-border/60 bg-transparent p-0 shadow-none">
+          {activeDialogEvent ? (
+            <EventCard
+              event={activeDialogEvent}
+              adminOrgIds={adminOrgIds}
+              isSubscribed={subscribedOrgIds.includes(String(activeDialogEvent.organizationId?._id || activeDialogEvent.organizationId))}
+              onSubscriptionChange={handleSubscriptionChange}
+              variant="dialog"
+            />
+          ) : null}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
