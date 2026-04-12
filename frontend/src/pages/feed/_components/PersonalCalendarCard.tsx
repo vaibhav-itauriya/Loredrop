@@ -1,9 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   addDays,
+  endOfMonth,
+  endOfWeek,
   format,
   isAfter,
   isSameDay,
+  isSameMonth,
+  startOfMonth,
   startOfDay,
   startOfWeek,
 } from "date-fns";
@@ -17,7 +21,7 @@ import {
   Plus,
   Trash2,
 } from "lucide-react";
-import { interactionsAPI } from "@/lib/api";
+import { eventsAPI, interactionsAPI } from "@/lib/api";
 import { useAcademicTimetable } from "@/hooks/use-academic-timetable.ts";
 import { Calendar } from "@/components/ui/calendar.tsx";
 import { Badge } from "@/components/ui/badge.tsx";
@@ -50,6 +54,14 @@ type SavedEvent = {
   organizationId?: { name?: string } | string;
 };
 
+type VisibleCalendarEvent = {
+  _id?: string;
+  title?: string;
+  venue?: string;
+  dateTime?: string;
+  organizationId?: { name?: string } | string;
+};
+
 function isSavedEvent(event: SavedEvent | null): event is SavedEvent {
   return event !== null;
 }
@@ -77,7 +89,9 @@ export default function PersonalCalendarCard() {
   const { isAuthenticated } = useAuth();
   const currentYear = new Date().getFullYear();
   const [events, setEvents] = useState<SavedEvent[]>([]);
+  const [visibleEvents, setVisibleEvents] = useState<VisibleCalendarEvent[]>([]);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
+  const [monthCursor, setMonthCursor] = useState(new Date());
   const [searchText, setSearchText] = useState("");
   const [upcomingOnly, setUpcomingOnly] = useState(true);
   const [loading, setLoading] = useState(true);
@@ -137,15 +151,73 @@ export default function PersonalCalendarCard() {
     return () => window.removeEventListener("calendar-save-updated", handleCalendarSaveUpdate);
   }, [isAuthenticated]);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    const fetchVisibleEvents = async () => {
+      try {
+        const rangeStart = startOfWeek(startOfMonth(monthCursor));
+        const rangeEnd = endOfWeek(endOfMonth(monthCursor));
+        const rangeEvents = await eventsAPI.getCalendarRange(
+          format(rangeStart, "yyyy-MM-dd"),
+          format(rangeEnd, "yyyy-MM-dd"),
+        );
+
+        const deduped = Array.from(
+          new Map(
+            (Array.isArray(rangeEvents) ? rangeEvents : [])
+              .filter((event: any) => event?._id && event?.dateTime)
+              .map((event: any) => [String(event._id), event]),
+          ).values(),
+        );
+
+        if (!cancelled) {
+          setVisibleEvents(deduped);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          console.error("Failed to fetch visible planner events:", error);
+        }
+      }
+    };
+
+    fetchVisibleEvents();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [monthCursor]);
+
   const scopedEvents = useMemo(() => {
     const now = new Date();
     if (!upcomingOnly) return events;
     return events.filter((event) => isAfter(new Date(event.dateTime), now));
   }, [events, upcomingOnly]);
 
+  const scopedVisibleEvents = useMemo(() => {
+    const monthEvents = visibleEvents.filter((event) => {
+      if (!event?.dateTime) return false;
+      return isSameMonth(new Date(event.dateTime), monthCursor);
+    });
+    return monthEvents;
+  }, [visibleEvents, upcomingOnly, monthCursor]);
+
   const eventDates = useMemo(
     () => scopedEvents.map((event) => startOfDay(new Date(event.dateTime))),
     [scopedEvents],
+  );
+
+  const visibleEventDates = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          scopedVisibleEvents
+            .map((event) => event?.dateTime)
+            .filter(Boolean)
+            .map((dateTime) => format(new Date(dateTime as string), "yyyy-MM-dd")),
+        ),
+      ).map((key) => startOfDay(new Date(key))),
+    [scopedVisibleEvents],
   );
 
   const busyDates = useMemo(() => {
@@ -166,11 +238,23 @@ export default function PersonalCalendarCard() {
       .sort((a, b) => new Date(a.dateTime).getTime() - new Date(b.dateTime).getTime());
   }, [scopedEvents, selectedDate]);
 
+  const selectedDateVisibleEvents = useMemo(() => {
+    if (!selectedDate) return [];
+    return scopedVisibleEvents
+      .filter((event) => event?.dateTime && isSameDay(new Date(event.dateTime), selectedDate))
+      .sort((a, b) => new Date(a.dateTime as string).getTime() - new Date(b.dateTime as string).getTime());
+  }, [scopedVisibleEvents, selectedDate]);
+
   const selectedDateEvents = useMemo(() => {
     const query = searchText.trim().toLowerCase();
-    if (!query) return selectedDateAllEvents;
-    return selectedDateAllEvents.filter((event) => event.title.toLowerCase().includes(query));
-  }, [selectedDateAllEvents, searchText]);
+    const visibleById = new Map(selectedDateVisibleEvents.map((event) => [String(event._id), event]));
+    const mergedEvents = [
+      ...selectedDateVisibleEvents,
+      ...selectedDateAllEvents.filter((event) => !visibleById.has(String(event._id))),
+    ];
+    if (!query) return mergedEvents;
+    return mergedEvents.filter((event) => (event.title || "").toLowerCase().includes(query));
+  }, [selectedDateAllEvents, selectedDateVisibleEvents, searchText]);
 
   const next48HoursCount = useMemo(() => {
     const now = new Date();
@@ -228,6 +312,14 @@ export default function PersonalCalendarCard() {
   }, [selectedDateAllEvents, selectedDaySlots]);
 
   const getOrganizationName = (event: SavedEvent) => {
+    if (!event.organizationId) return "IIT Kanpur";
+    if (typeof event.organizationId === "string") return "IIT Kanpur";
+    return event.organizationId.name || "IIT Kanpur";
+  };
+
+  const isSavedEventId = (eventId?: string) => events.some((event) => event._id === eventId);
+
+  const getVisibleOrganizationName = (event: VisibleCalendarEvent) => {
     if (!event.organizationId) return "IIT Kanpur";
     if (typeof event.organizationId === "string") return "IIT Kanpur";
     return event.organizationId.name || "IIT Kanpur";
@@ -301,16 +393,53 @@ export default function PersonalCalendarCard() {
                 captionLayout="dropdown"
                 fromYear={currentYear - 3}
                 toYear={currentYear + 5}
+                month={monthCursor}
+                onMonthChange={setMonthCursor}
                 selected={selectedDate}
                 onSelect={(date) => {
                   setSelectedDate(date);
                   setSearchText("");
                 }}
                 className="w-full rounded-[1.25rem] border border-border/50 bg-background/70 p-3"
-                modifiers={{ hasEvents: eventDates, busyDay: busyDates }}
-                modifiersClassNames={{
-                  hasEvents: "relative after:absolute after:bottom-1.5 after:left-1/2 after:-translate-x-1/2 after:h-1 after:w-1 after:rounded-full after:bg-primary",
-                  busyDay: "ring-1 ring-primary/50 rounded-md",
+                classNames={{ today: "bg-transparent text-inherit rounded-none" }}
+                modifiers={{ hasEvents: eventDates, visibleEvents: visibleEventDates, busyDay: busyDates }}
+                modifiersClassNames={{ busyDay: "ring-1 ring-primary/50 rounded-md" }}
+                components={{
+                  DayButton: ({ day, className: _className, ...props }) => {
+                    const date = startOfDay(day.date);
+                    const hasSavedEvents = eventDates.some((eventDate) => isSameDay(eventDate, date));
+                    const hasVisibleEvents = visibleEventDates.some((eventDate) => isSameDay(eventDate, date));
+                    const isSelected = !!selectedDate && isSameDay(date, selectedDate);
+                    const isToday = isSameDay(date, new Date());
+                    const isCurrentMonth = isSameMonth(date, monthCursor);
+
+                    return (
+                      <button
+                        {...props}
+                        type="button"
+                        className={`relative flex h-10 w-10 items-center justify-center rounded-md border text-sm transition ${
+                          isSelected
+                            ? "border-primary bg-primary text-primary-foreground shadow-none"
+                            : isToday
+                              ? "border-orange-500 bg-orange-500 text-white shadow-none"
+                            : hasSavedEvents
+                              ? "border-primary/60 bg-primary/[0.05] text-foreground"
+                              : isCurrentMonth
+                                ? "border-transparent text-foreground hover:border-primary/25 hover:bg-primary/[0.04]"
+                                : "border-transparent text-muted-foreground/65"
+                        }`}
+                      >
+                        <span>{format(date, "d")}</span>
+                        {hasVisibleEvents && (
+                          <span
+                            className={`absolute bottom-1.5 left-1/2 h-1.5 w-1.5 -translate-x-1/2 rounded-full ${
+                              isSelected || isToday ? "bg-white" : "bg-primary"
+                            }`}
+                          />
+                        )}
+                      </button>
+                    );
+                  },
                 }}
               />
             )}
@@ -322,32 +451,39 @@ export default function PersonalCalendarCard() {
                 {selectedDate ? format(selectedDate, "EEE, MMM d") : "Select a date"}
               </p>
               <Badge variant="outline" className="text-xs">
-                {selectedDateAllEvents.length} saved
+                {selectedDateEvents.length} event{selectedDateEvents.length === 1 ? "" : "s"}
               </Badge>
             </div>
             <Input
               value={searchText}
               onChange={(e) => setSearchText(e.target.value)}
-              placeholder="Search saved events..."
+              placeholder="Search events on this day..."
               className="mb-3 h-9 text-xs"
             />
             <div className="max-h-56 space-y-2 overflow-auto pr-1 no-scrollbar">
               {selectedDateEvents.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
-                  No saved events for this day.
+                  No events for this day.
                 </p>
               ) : (
                 selectedDateEvents.map((event) => (
-                  <div key={event._id} className="rounded-xl border border-border/50 bg-background/70 px-3 py-2">
-                    <p className="text-sm font-medium leading-tight">{event.title}</p>
+                  <div key={event._id} className={`rounded-xl border px-3 py-2 ${isSavedEventId(event._id) ? "border-primary/40 bg-primary/[0.05]" : "border-border/50 bg-background/70"}`}>
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="text-sm font-medium leading-tight">{event.title}</p>
+                      {isSavedEventId(event._id) && (
+                        <Badge variant="outline" className="rounded-full border-primary/30 bg-primary/[0.08] text-[10px] text-primary">
+                          Saved
+                        </Badge>
+                      )}
+                    </div>
                     <div className="mt-1 space-y-1 text-xs text-muted-foreground">
                       <p className="flex items-center gap-1.5">
                         <Clock3 className="h-3 w-3" />
-                        {format(new Date(event.dateTime), "h:mm a")}
+                        {event.dateTime ? format(new Date(event.dateTime), "h:mm a") : "Time TBA"}
                       </p>
                       <p className="flex items-center gap-1.5">
                         <MapPin className="h-3 w-3" />
-                        {event.venue || "Venue TBA"} | {getOrganizationName(event)}
+                        {(event.venue || "Venue TBA")} | {"organizationId" in event && !("saveId" in event) ? getVisibleOrganizationName(event as VisibleCalendarEvent) : getOrganizationName(event as SavedEvent)}
                       </p>
                     </div>
                   </div>

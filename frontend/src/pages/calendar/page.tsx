@@ -26,7 +26,7 @@ import {
   Trash2,
 } from "lucide-react";
 import EventCard from "../feed/_components/EventCard.tsx";
-import { interactionsAPI, organizationsAPI } from "@/lib/api";
+import { eventsAPI, interactionsAPI, organizationsAPI } from "@/lib/api";
 import { useAuth } from "@/hooks/use-auth.ts";
 import { useAcademicTimetable } from "@/hooks/use-academic-timetable.ts";
 import { toMinutes } from "@/lib/planner.ts";
@@ -46,6 +46,10 @@ import {
 import { toast } from "sonner";
 
 type SavedCalendarItem = { _id: string; eventId: any };
+type VisibleCalendarEvent = {
+  _id?: string;
+  dateTime?: string;
+};
 type PlannerEvent = {
   id: string;
   title: string;
@@ -93,6 +97,7 @@ function overlaps(startA: number, endA: number, startB: number, endB: number) {
 export default function CalendarPage() {
   const { isAuthenticated } = useAuth();
   const [savedEvents, setSavedEvents] = useState<SavedCalendarItem[]>([]);
+  const [visibleEvents, setVisibleEvents] = useState<VisibleCalendarEvent[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [monthCursor, setMonthCursor] = useState(new Date());
@@ -102,20 +107,30 @@ export default function CalendarPage() {
   const [subscribedOrgIds, setSubscribedOrgIds] = useState<Set<string>>(new Set());
   const plannerLocked = !isAuthenticated;
 
+  const loadSavedEvents = async () => {
+    setIsLoading(true);
+    try {
+      const data = await interactionsAPI.getCalendarSaves();
+      setSavedEvents(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error("Failed to fetch calendar saves:", error);
+      toast.error("Failed to load saved events");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const fetch = async () => {
-      setIsLoading(true);
-      try {
-        const data = await interactionsAPI.getCalendarSaves();
-        setSavedEvents(Array.isArray(data) ? data : []);
-      } catch (error) {
-        console.error("Failed to fetch calendar saves:", error);
-        toast.error("Failed to load saved events");
-      } finally {
-        setIsLoading(false);
-      }
+    loadSavedEvents();
+
+    const handleCalendarSaveUpdated = () => {
+      loadSavedEvents();
     };
-    fetch();
+
+    window.addEventListener("calendar-save-updated", handleCalendarSaveUpdated);
+    return () => {
+      window.removeEventListener("calendar-save-updated", handleCalendarSaveUpdated);
+    };
   }, []);
 
   useEffect(() => {
@@ -141,6 +156,49 @@ export default function CalendarPage() {
       cancelled = true;
     };
   }, [isAuthenticated]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const fetchVisibleEvents = async () => {
+      try {
+        const rangeStart = startOfWeek(startOfMonth(monthCursor));
+        const rangeEnd = endOfWeek(endOfMonth(monthCursor));
+        const [rangeEvents, upcomingRangeEvents] = await Promise.all([
+          eventsAPI.getCalendarRange(
+            format(rangeStart, "yyyy-MM-dd"),
+            format(rangeEnd, "yyyy-MM-dd"),
+          ),
+          eventsAPI.getUpcoming(100),
+        ]);
+
+        const mergedEvents = [
+          ...(Array.isArray(rangeEvents) ? rangeEvents : []),
+          ...(Array.isArray(upcomingRangeEvents) ? upcomingRangeEvents : []),
+        ];
+
+        const dedupedEvents = Array.from(
+          new Map(
+            mergedEvents
+              .filter((event: any) => event?._id && event?.dateTime)
+              .map((event: any) => [String(event._id), event]),
+          ).values(),
+        );
+        if (!cancelled) {
+          setVisibleEvents(dedupedEvents);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          console.error("Failed to fetch visible calendar events:", error);
+        }
+      }
+    };
+
+    fetchVisibleEvents();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [monthCursor]);
 
   const normalizedEvents = useMemo<PlannerEvent[]>(() => {
     const mapped: PlannerEvent[] = [];
@@ -188,6 +246,18 @@ export default function CalendarPage() {
   );
 
   const eventDates = useMemo(() => normalizedEvents.map((event) => new Date(event.dateTime)), [normalizedEvents]);
+  const visibleEventDates = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          visibleEvents
+            .map((event) => event?.dateTime)
+            .filter(Boolean)
+            .map((dateTime) => format(new Date(dateTime as string), "yyyy-MM-dd")),
+        ),
+      ).map((key) => new Date(key)),
+    [visibleEvents],
+  );
   const busyDates = useMemo(() => {
     const counts = new Map<string, number>();
     normalizedEvents.forEach((event) => {
@@ -426,21 +496,25 @@ export default function CalendarPage() {
                       weekday: "flex h-9 items-center justify-center rounded-full bg-muted/50 text-[11px] font-semibold uppercase tracking-[0.22em] text-muted-foreground",
                       day: "aspect-auto min-h-[5.75rem]",
                     }}
-                    modifiers={{ hasEvents: eventDates, busyDay: busyDates, selectedWeek: weekDates }}
-                    modifiersClassNames={{ hasEvents: "ring-1 ring-primary/25", busyDay: "bg-amber-50", selectedWeek: "border-primary/20" }}
+                    modifiers={{ hasEvents: eventDates, visibleEvents: visibleEventDates, busyDay: busyDates, selectedWeek: weekDates }}
+                    modifiersClassNames={{ busyDay: "bg-amber-50", selectedWeek: "border-primary/20" }}
                     components={{
                       DayButton: ({ day, ...props }) => {
                         const date = day.date;
                         const dayEvents = normalizedEvents.filter((event) => isSameDay(new Date(event.dateTime), date));
                         const isCurrentMonth = isSameMonth(date, monthCursor);
                         const isSelected = isSameDay(date, selectedDate);
+                        const hasSavedEvents = dayEvents.length > 0;
+                        const hasVisibleEvents = visibleEventDates.some((eventDate) => isSameDay(eventDate, date));
                         return (
                           <button
                             {...props}
                             type="button"
-                            className={`h-full w-full rounded-2xl border p-2 text-left transition ${
+                            className={`relative h-full w-full rounded-2xl border p-2 text-left transition ${
                               isSelected
                                 ? "border-primary bg-primary text-primary-foreground shadow-[0_12px_24px_rgba(14,116,144,0.25)]"
+                                : hasSavedEvents
+                                  ? "border-primary/45 bg-primary/[0.04] shadow-[inset_0_0_0_1px_rgba(14,116,144,0.16)] hover:border-primary/60 hover:bg-primary/[0.06]"
                                 : isCurrentMonth
                                   ? "border-border/60 bg-background hover:border-primary/30 hover:bg-primary/5"
                                   : "border-transparent bg-muted/20 text-muted-foreground/70"
@@ -448,22 +522,15 @@ export default function CalendarPage() {
                           >
                             <div className="flex items-start justify-between gap-2">
                               <span className="text-sm font-semibold">{format(date, "d")}</span>
-                              {dayEvents.length > 0 && (
-                                <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${isSelected ? "bg-white/15 text-primary-foreground" : "bg-primary/10 text-primary"}`}>
-                                  {dayEvents.length}
-                                </span>
-                              )}
                             </div>
-                            <div className="mt-5 space-y-1">
-                              {dayEvents.slice(0, 2).map((event) => (
-                                <div key={`${event.id}-${format(date, "yyyyMMdd")}`} className={`truncate rounded-full px-2 py-1 text-[10px] ${isSelected ? "bg-white/14 text-primary-foreground" : "bg-muted text-foreground"}`}>
-                                  {event.title}
-                                </div>
-                              ))}
-                              {dayEvents.length > 2 && (
-                                <p className={`text-[10px] ${isSelected ? "text-primary-foreground/80" : "text-muted-foreground"}`}>
-                                  +{dayEvents.length - 2} more
-                                </p>
+                            <div className="mt-4 flex min-h-[2.5rem] items-end">
+                              {hasVisibleEvents && (
+                                <span
+                                  aria-label="Event exists on this date"
+                                  className={`inline-flex h-2.5 w-2.5 rounded-full ${
+                                    isSelected ? "bg-primary-foreground" : "bg-primary"
+                                  }`}
+                                />
                               )}
                             </div>
                           </button>

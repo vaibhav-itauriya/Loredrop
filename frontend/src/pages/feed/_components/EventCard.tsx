@@ -81,6 +81,15 @@ function getCoverInitials(label?: string): string {
     .join("") || "LD";
 }
 
+function getProfileInitials(label?: string): string {
+  return (label || "C")
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() || "")
+    .join("") || "C";
+}
+
 const audienceLabels: Record<string, string> = {
   ug: "UG",
   pg: "PG",
@@ -180,7 +189,7 @@ function EventCard({
   }, [mediaDialogCarouselApi, mediaDialogOpen, selectedMediaIndex]);
 
   useEffect(() => {
-    if (!showComments) return;
+    if (!showComments && variant !== "dialog") return;
 
     let cancelled = false;
     const fetch = async () => {
@@ -204,7 +213,7 @@ function EventCard({
     return () => {
       cancelled = true;
     };
-  }, [localEvent._id, showComments]);
+  }, [localEvent._id, showComments, variant]);
 
   const handleUpvote = async () => {
     if (!isAuthenticated) {
@@ -424,6 +433,7 @@ function EventCard({
   const displayDescription = descriptionWithoutYoutubeLinks || localEvent.description || "";
 
   const canOpenPost = variant === "feed" && !!onOpenPost;
+  const isDialogVariant = variant === "dialog";
   const openPost = () => {
     if (!canOpenPost) return;
     onOpenPost(localEvent);
@@ -444,11 +454,17 @@ function EventCard({
         data-event-id={localEvent._id}
         className={cn(
           "group overflow-hidden rounded-[1.75rem] border border-white/70 bg-[linear-gradient(145deg,rgba(255,255,255,0.97),rgba(248,250,252,0.92))] shadow-[0_18px_50px_rgba(15,23,42,0.08)] ring-1 ring-slate-950/[0.03] backdrop-blur-xl transition-all duration-300 hover:border-primary/20 hover:shadow-[0_26px_70px_rgba(15,23,42,0.14)] dark:border-slate-700/70 dark:bg-[linear-gradient(145deg,rgba(30,41,59,0.96),rgba(15,23,42,0.94))] dark:ring-white/[0.04] dark:shadow-[0_18px_50px_rgba(2,6,23,0.34)]",
+          isDialogVariant
+            ? "mx-auto max-h-[88vh] rounded-[1.2rem] shadow-[0_30px_80px_rgba(15,23,42,0.22)] lg:grid lg:grid-cols-[minmax(0,1.15fr)_minmax(380px,0.85fr)] lg:bg-white dark:lg:bg-slate-950"
+            : "",
           canOpenPost ? "cursor-pointer" : "",
         )}
         onClick={openPost}
       >
-        <div className={`relative w-full overflow-hidden bg-[linear-gradient(180deg,rgba(226,232,240,0.5),rgba(203,213,225,0.28))] ${hasFallbackMedia ? (inlineYoutubeId ? "aspect-video" : "aspect-square") : ""}`}>
+        <div className={cn(
+          `relative w-full overflow-hidden bg-[linear-gradient(180deg,rgba(226,232,240,0.5),rgba(203,213,225,0.28))] ${hasFallbackMedia ? (inlineYoutubeId ? "aspect-video" : "aspect-square") : ""}`,
+          isDialogVariant ? "lg:flex lg:min-h-0 lg:max-h-[88vh] lg:items-center lg:justify-center lg:bg-[#1d2226]" : "",
+        )}>
           <Carousel
             opts={{ loop: mediaItems.length > 1 }}
             className={hasFallbackMedia ? "h-full w-full [&_[data-slot=carousel-content]]:h-full [&_[data-slot=carousel-item]]:h-full" : "w-full"}
@@ -475,7 +491,7 @@ function EventCard({
                   ) : (
                     <button
                       type="button"
-                      className={`relative block w-full overflow-hidden ${media.kind === "fallback" ? "h-full min-h-full" : ""}`}
+                      className={`relative block w-full overflow-hidden ${media.kind === "fallback" ? "h-full min-h-full" : isDialogVariant ? "lg:flex lg:min-h-0 lg:max-h-[88vh] lg:items-center lg:justify-center lg:bg-[#1d2226]" : ""}`}
                       onClick={(event) => {
                         stopCardOpen(event);
                         setSelectedMediaIndex(index);
@@ -553,8 +569,12 @@ function EventCard({
                           <img
                             src={media.url}
                             alt={media.alt}
-                            className={`block w-full transition duration-700 group-hover:scale-[1.015] ${
-                              loadedMedia[media.url] ? "h-auto scale-100 blur-0" : "h-auto scale-[1.01] blur-xl"
+                            className={`block transition duration-700 ${
+                              isDialogVariant
+                                ? "h-auto max-h-[88vh] w-auto max-w-full object-contain"
+                                : "w-full group-hover:scale-[1.015]"
+                            } ${
+                              loadedMedia[media.url] ? "scale-100 blur-0" : "scale-[1.01] blur-xl"
                             }`}
                             loading="lazy"
                             decoding="async"
@@ -576,10 +596,10 @@ function EventCard({
               </>
             )}
           </Carousel>
-          {!inlineYoutubeId && (
+          {!inlineYoutubeId && !isDialogVariant && (
             <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_top,rgba(15,23,42,0.72),rgba(15,23,42,0.08)_42%,rgba(255,255,255,0.02))]" />
           )}
-          <div className={`absolute left-4 top-4 flex flex-wrap gap-2 ${inlineYoutubeId ? "" : "pointer-events-none"}`}>
+          <div className={`absolute left-4 top-4 z-10 flex flex-wrap gap-2 ${inlineYoutubeId || isDialogVariant ? "" : "pointer-events-none"}`}>
             {localEvent.recommended && (
               <Badge className="rounded-full border border-amber-200/70 bg-amber-300/90 px-3 py-1 text-[11px] font-semibold text-amber-950 shadow-[0_8px_20px_rgba(245,158,11,0.24)] backdrop-blur-sm">
                 For You
@@ -592,7 +612,7 @@ function EventCard({
               {localEvent.mode}
             </Badge>
           </div>
-          {!inlineYoutubeId && (
+          {!inlineYoutubeId && !isDialogVariant && (
             <div className="pointer-events-none absolute bottom-4 left-4 right-4 flex items-end justify-between gap-3">
               <div>
                 <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-white/72">Next up</p>
@@ -603,7 +623,7 @@ function EventCard({
               </div>
             </div>
           )}
-          {mediaItems.length > 1 && (
+          {mediaItems.length > 1 && !isDialogVariant && (
             <div className="absolute bottom-4 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-black/30 px-3 py-1">
               {mediaItems.map((_: any, index: number) => (
                 <span
@@ -615,7 +635,7 @@ function EventCard({
           )}
         </div>
 
-        <div className="space-y-0">
+        <div className={cn("space-y-0", isDialogVariant ? "flex min-h-0 flex-col border-t border-slate-200/80 lg:h-[88vh] lg:border-l lg:border-t-0 dark:border-slate-800/80" : "")}>
           <div className="p-4 sm:p-5">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0 flex items-start gap-3" onClick={stopCardOpen}>
@@ -776,7 +796,7 @@ function EventCard({
               <h3 className="text-[1.38rem] font-semibold leading-[1.02] tracking-[-0.02em] text-slate-950 sm:text-[1.52rem] dark:text-slate-50" style={{ fontFamily: "var(--font-display)" }}>
                 {localEvent.title}
               </h3>
-              <p className="line-clamp-3 text-[15px] leading-6 text-slate-700 dark:text-slate-300/90">
+              <p className={cn("text-[15px] leading-6 text-slate-700 dark:text-slate-300/90", isDialogVariant ? "" : "line-clamp-3")}>
                 {displayDescription || "A fresh drop from your community feed."}
               </p>
               <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
@@ -863,37 +883,136 @@ function EventCard({
             </Button>
           </div>
 
-          <div className="px-4 pb-4 sm:px-5 sm:pb-5" onClick={stopCardOpen}>
-            <button
-              type="button"
-              className="w-full rounded-[1.2rem] border border-white/70 bg-[linear-gradient(145deg,rgba(248,250,252,0.95),rgba(241,245,249,0.92))] p-3 text-left shadow-[inset_0_1px_0_rgba(255,255,255,0.85)] transition-all hover:border-primary/15 hover:bg-white dark:border-slate-700 dark:bg-[linear-gradient(145deg,rgba(30,41,59,0.9),rgba(15,23,42,0.92))] dark:shadow-none dark:hover:bg-slate-800"
-              onClick={() => setShowComments(true)}
-            >
-              <div className="flex items-center justify-between gap-3">
+          {isDialogVariant ? (
+            <div className="flex min-h-0 flex-1 flex-col border-t border-slate-200/80 px-4 pb-4 pt-3 sm:px-5 dark:border-slate-800/80" onClick={stopCardOpen}>
+              <div className="mb-3 flex items-center justify-between gap-3">
                 <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
-                    Conversation
-                  </p>
-                  <p className="mt-1 text-sm text-slate-900 dark:text-slate-100">
-                    {comments.length > 0
-                      ? comments[0]?.text
-                      : commentCount > 0
-                        ? `${commentCount} comment${commentCount === 1 ? "" : "s"} on this event. Open to read the conversation.`
-                        : "Be the first to drop a quick note on this event."}
+                  <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Comments</p>
+                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                    {commentCount} repl{commentCount === 1 ? "y" : "ies"} in this thread
                   </p>
                 </div>
-                <div className="flex items-center gap-2 rounded-full border border-white/70 bg-white/90 px-3 py-1 text-sm text-slate-500 shadow-sm dark:border-slate-700 dark:bg-slate-800/90 dark:text-slate-300 dark:shadow-none">
-                  <MessageCircle className="h-4 w-4" />
-                  <span>{commentCount}</span>
-                </div>
+                <button
+                  type="button"
+                  className="text-xs font-medium text-primary transition hover:opacity-80"
+                  onClick={() => setShowComments(true)}
+                >
+                  Open full thread
+                </button>
               </div>
-              {comments.length > 0 && (
-                <p className="mt-2 text-xs text-muted-foreground">
-                  {comments[0]?.userId?.name || comments[0]?.userId?.displayName || "Community member"} said this most recently
-                </p>
-              )}
-            </button>
-          </div>
+
+              <div className="mb-3 flex items-center justify-between rounded-[1rem] border border-slate-200/80 bg-slate-50/80 px-3 py-2 text-xs text-slate-500 dark:border-slate-800/80 dark:bg-slate-900/50 dark:text-slate-400">
+                <span>Most relevant</span>
+                <span>{comments.length > 6 ? `Showing 6 of ${comments.length}` : "Latest activity"}</span>
+              </div>
+
+              <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
+                {comments.length === 0 ? (
+                  <div className="rounded-[1rem] border border-dashed border-border/70 bg-muted/20 p-4 text-sm text-muted-foreground">
+                    No comments yet. Start the conversation on this event.
+                  </div>
+                ) : (
+                  comments.slice(0, 6).map((comment: any) => {
+                    const commenterName = comment.userId?.name || comment.userId?.displayName || "Community member";
+
+                    return (
+                      <div key={comment._id} className="flex items-start gap-3">
+                        <Avatar className="mt-0.5 h-10 w-10 shrink-0 border border-white/60 shadow-sm dark:border-slate-700">
+                          <AvatarImage src={comment.userId?.avatar} alt={commenterName} />
+                          <AvatarFallback>{getProfileInitials(commenterName)}</AvatarFallback>
+                        </Avatar>
+                        <div className="min-w-0 flex-1">
+                          <div className="rounded-[1rem] bg-slate-100 px-4 py-3 dark:bg-slate-800/90">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <p className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">
+                                  {commenterName}
+                                </p>
+                                <p className="mt-1 text-sm leading-6 text-slate-600 dark:text-slate-300/90">{comment.text}</p>
+                              </div>
+                              <span className="shrink-0 text-[11px] text-slate-500 dark:text-slate-400">
+                                {format(new Date(comment.createdAt), "MMM d")}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="mt-2 flex items-center gap-3 px-1 text-xs text-slate-500 dark:text-slate-400">
+                            <button type="button" className="font-medium transition hover:text-slate-900 dark:hover:text-slate-100">
+                              Like
+                            </button>
+                            <button type="button" className="font-medium transition hover:text-slate-900 dark:hover:text-slate-100">
+                              Reply
+                            </button>
+                            <span>{format(new Date(comment.createdAt), "h:mm a")}</span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              <div className="mt-4 border-t border-slate-200/80 pt-3 dark:border-slate-800/80">
+                {isAuthenticated ? (
+                  <div className="flex items-end gap-3">
+                    <Avatar className="h-10 w-10 shrink-0 border border-white/60 shadow-sm dark:border-slate-700">
+                      <AvatarImage src={user?.avatar} alt={user?.displayName || user?.name || "You"} />
+                      <AvatarFallback>{getProfileInitials(user?.displayName || user?.name || "You")}</AvatarFallback>
+                    </Avatar>
+                    <div className="flex flex-1 gap-3 rounded-[1.25rem] border border-border/60 bg-muted/20 p-2">
+                      <input
+                        type="text"
+                        placeholder="Add a comment..."
+                        className="h-11 flex-1 rounded-full border border-transparent bg-transparent px-4 text-sm outline-none transition focus:border-primary/30 focus:bg-background focus:ring-2 focus:ring-primary/10"
+                        value={commentText}
+                        onChange={(e) => setCommentText(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") handleAddComment();
+                        }}
+                        disabled={isLoading}
+                      />
+                      <Button className="rounded-full px-5" onClick={handleAddComment} disabled={isLoading}>
+                        Post
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">Sign in to join the conversation.</p>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="px-4 pb-4 sm:px-5 sm:pb-5" onClick={stopCardOpen}>
+              <button
+                type="button"
+                className="w-full rounded-[1.2rem] border border-white/70 bg-[linear-gradient(145deg,rgba(248,250,252,0.95),rgba(241,245,249,0.92))] p-3 text-left shadow-[inset_0_1px_0_rgba(255,255,255,0.85)] transition-all hover:border-primary/15 hover:bg-white dark:border-slate-700 dark:bg-[linear-gradient(145deg,rgba(30,41,59,0.9),rgba(15,23,42,0.92))] dark:shadow-none dark:hover:bg-slate-800"
+                onClick={() => setShowComments(true)}
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
+                      Conversation
+                    </p>
+                    <p className="mt-1 text-sm text-slate-900 dark:text-slate-100">
+                      {comments.length > 0
+                        ? comments[0]?.text
+                        : commentCount > 0
+                          ? `${commentCount} comment${commentCount === 1 ? "" : "s"} on this event. Open to read the conversation.`
+                          : "Be the first to drop a quick note on this event."}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 rounded-full border border-white/70 bg-white/90 px-3 py-1 text-sm text-slate-500 shadow-sm dark:border-slate-700 dark:bg-slate-800/90 dark:text-slate-300 dark:shadow-none">
+                    <MessageCircle className="h-4 w-4" />
+                    <span>{commentCount}</span>
+                  </div>
+                </div>
+                {comments.length > 0 && (
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    {comments[0]?.userId?.name || comments[0]?.userId?.displayName || "Community member"} said this most recently
+                  </p>
+                )}
+              </button>
+            </div>
+          )}
         </div>
       </Card>
 

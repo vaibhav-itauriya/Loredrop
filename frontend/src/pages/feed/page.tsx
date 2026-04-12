@@ -937,7 +937,7 @@ export default function FeedPage() {
         </div>
       </div>
       <Dialog open={!!activeDialogEvent} onOpenChange={handleDialogOpenChange}>
-        <DialogContent className="max-h-[92vh] max-w-5xl overflow-y-auto border-border/60 bg-transparent p-0 shadow-none">
+        <DialogContent className="max-h-[92vh] w-[min(90vw,72rem)] max-w-none overflow-y-auto border-border/60 bg-transparent p-0 shadow-none sm:max-w-none">
           {activeDialogEvent ? (
             <EventCard
               event={activeDialogEvent}

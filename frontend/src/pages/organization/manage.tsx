@@ -52,7 +52,7 @@ type ManagedOrganization = MembershipOrganization & {
 };
 
 const MANAGEABLE_ROLES = new Set(["owner", "admin", "moderator", "member"]);
-const BRAND_EDIT_ROLES = new Set(["owner", "admin"]);
+const BRAND_EDIT_ROLES = new Set(["owner", "admin", "moderator", "member"]);
 
 export default function OrganizationManagePage() {
   const { slug } = useParams();
@@ -443,11 +443,6 @@ export default function OrganizationManagePage() {
                         <Button onClick={handleSaveOrganization} disabled={!canEditBrand || savingOrg}>
                           {savingOrg ? "Saving..." : "Save Details"}
                         </Button>
-                        {!canEditBrand && (
-                          <p className="text-sm text-slate-500">
-                            Your current role can manage events here, but only owners/admins can update organization identity.
-                          </p>
-                        )}
                       </div>
                     </CardContent>
                   </Card>

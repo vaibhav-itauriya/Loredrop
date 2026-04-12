@@ -16,7 +16,7 @@ export type OrgAction =
 const ACTION_ROLES: Record<OrgAction, Array<'owner' | 'admin' | 'moderator' | 'member'>> = {
   create_event: ['owner', 'admin', 'moderator', 'member'],
   edit_event: ['owner', 'admin', 'moderator'],
-  manage_organization: ['owner', 'admin'],
+  manage_organization: ['owner', 'admin', 'moderator', 'member'],
   manage_requests: ['owner', 'admin'],
   manage_admins: ['owner'],
   view_rsvp: ['owner', 'admin', 'moderator'],
