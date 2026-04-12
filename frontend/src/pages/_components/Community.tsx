@@ -82,35 +82,35 @@ export default function Community() {
         >
           <div className="col-span-2 row-span-2 rounded-2xl overflow-hidden">
             <img
-              src="https://images.unsplash.com/photo-1611373099245-5ce76dcdac4c?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NzIwMTN8MHwxfHNlYXJjaHw0fHx1bml2ZXJzaXR5JTIwc3R1ZGVudHMlMjBjb21tdW5pdHklMjBmZXN0aXZhbCUyMG91dGRvb3J8ZW58MHx8fHwxNzY4NzUyNDU4fDA&ixlib=rb-4.1.0&q=80&w=1080"
+              src="/assets/students-gymkhana.jpg"
               alt="Students on campus"
               className="w-full h-full object-cover hover:scale-105 transition-transform duration-500"
             />
           </div>
           <div className="rounded-2xl overflow-hidden">
             <img
-              src="https://images.unsplash.com/photo-1744232255607-cad8c181b221?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NzIwMTN8MHwxfHNlYXJjaHw2fHx1bml2ZXJzaXR5JTIwc3R1ZGVudHMlMjBjb21tdW5pdHklMjBmZXN0aXZhbCUyMG91dGRvb3J8ZW58MHx8fHwxNzY4NzUyNDU4fDA&ixlib=rb-4.1.0&q=80&w=1080"
+              src="/assets/placement.jpg"
               alt="Festival crowd"
               className="w-full h-48 object-cover hover:scale-105 transition-transform duration-500"
             />
           </div>
           <div className="rounded-2xl overflow-hidden">
             <img
-              src="https://images.unsplash.com/photo-1549630552-4cfaf858cb03?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NzIwMTN8MHwxfHNlYXJjaHw1fHx1bml2ZXJzaXR5JTIwc3R1ZGVudHMlMjBjb21tdW5pdHklMjBmZXN0aXZhbCUyMG91dGRvb3J8ZW58MHx8fHwxNzY4NzUyNDU4fDA&ixlib=rb-4.1.0&q=80&w=1080"
+              src="/assets/internship.JPG"
               alt="Campus aerial view"
               className="w-full h-48 object-cover hover:scale-105 transition-transform duration-500"
             />
           </div>
           <div className="rounded-2xl overflow-hidden">
             <img
-              src="https://images.unsplash.com/photo-1633701945987-d21c145a07b0?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NzIwMTN8MHwxfHNlYXJjaHwxMHx8dW5pdmVyc2l0eSUyMHN0dWRlbnRzJTIwY29tbXVuaXR5JTIwZmVzdGl2YWwlMjBvdXRkb29yfGVufDB8fHx8MTc2ODc1MjQ1OHww&ixlib=rb-4.1.0&q=80&w=1080"
+              src="/assets/dosa.jpg"
               alt="Students sitting"
               className="w-full h-48 object-cover hover:scale-105 transition-transform duration-500"
             />
           </div>
           <div className="rounded-2xl overflow-hidden">
             <img
-              src="https://images.unsplash.com/photo-1762158007836-25d13ab34c1c?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NzIwMTN8MHwxfHNlYXJjaHwxMHx8Y29sbGVnZSUyMGNhbXB1cyUyMGV2ZW50JTIwc3R1ZGVudHMlMjBnYXRoZXJpbmclMjBjZWxlYnJhdGlvbnxlbnwwfHx8fDE3Njg3NTI0NTh8MA&ixlib=rb-4.1.0&q=80&w=1080"
+              src="/assets/dord (1).jpg"
               alt="Students in chairs"
               className="w-full h-48 object-cover hover:scale-105 transition-transform duration-500"
             />

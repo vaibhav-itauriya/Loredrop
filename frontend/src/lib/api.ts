@@ -4,7 +4,7 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? '/ap
 async function getAuthToken(): Promise<string | null> {
   // First try to get token from localStorage (email auth)
   const token = localStorage.getItem('authToken');
-  if (token) {
+  if (token && token !== 'null' && token !== 'undefined') {
     return token;
   }
 

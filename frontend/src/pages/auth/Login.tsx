@@ -52,7 +52,7 @@ export default function LoginPage() {
       }
 
       const data = await response.json();
-      
+
       // Store auth token and user data
       if (data.token) {
         localStorage.setItem('authToken', data.token);
@@ -61,9 +61,9 @@ export default function LoginPage() {
         localStorage.setItem('user', JSON.stringify(data.user));
       }
       window.dispatchEvent(new Event('auth-state-changed'));
-      
+
       toast.success('Login successful!');
-      
+
       // Redirect to feed
       setTimeout(() => {
         window.location.href = '/feed';

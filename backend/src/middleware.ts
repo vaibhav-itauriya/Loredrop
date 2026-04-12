@@ -70,8 +70,8 @@ export const authMiddleware = async (req: Request, res: Response, next: NextFunc
     req.userId = user._id.toString();
 
     next();
-  } catch (error) {
-    console.error('Auth error:', error);
+  } catch (error: any) {
+    console.error('Auth error:', error.message || error);
     res.status(401).json({ error: 'Unauthorized' });
   }
 };
@@ -124,8 +124,8 @@ export const optionalAuthMiddleware = async (req: Request, res: Response, next: 
     }
 
     next();
-  } catch (error) {
-    console.error('Optional auth error:', error);
+  } catch (error: any) {
+    console.error('Optional auth error:', error.message || error);
     next();
   }
 };

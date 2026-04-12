@@ -125,7 +125,7 @@ export default function Hero() {
             <div className="absolute inset-0 bg-gradient-to-t from-background via-transparent to-transparent z-10" />
             <div className="rounded-2xl overflow-hidden border border-border/50 shadow-2xl shadow-primary/10">
               <img
-                src="https://images.unsplash.com/photo-1746473604530-ca5139f4f485?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NzIwMTN8MHwxfHNlYXJjaHwzfHx1bml2ZXJzaXR5JTIwc3R1ZGVudHMlMjBjb21tdW5pdHklMjBmZXN0aXZhbCUyMG91dGRvb3J8ZW58MHx8fHwxNzY4NzUyNDU4fDA&ixlib=rb-4.1.0&q=80&w=1080"
+                src="/assets/student-campus-life.jpg"
                 alt="Campus community gathering"
                 className="w-full h-80 object-cover"
               />
