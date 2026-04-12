@@ -2,8 +2,12 @@ import { motion } from "motion/react";
 import { Button } from "@/components/ui/button.tsx";
 import { SignInButton } from "@/components/ui/signin.tsx";
 import platformLogo from "@/Gemini_Generated_Image_wwu3p2wwu3p2wwu3-removebg-preview.png";
+import { Moon, Sun } from "lucide-react";
+import { useTheme } from "next-themes";
 
 export default function Header() {
+  const { theme, setTheme } = useTheme();
+
   return (
     <motion.header
       initial={{ y: -20, opacity: 0 }}
@@ -37,16 +41,23 @@ export default function Header() {
           </nav>
 
           <div className="flex items-center gap-3">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setTheme(theme === "light" ? "dark" : "light")}
+              title="Toggle theme"
+            >
+              {theme === "light" ? (
+                <Moon className="w-5 h-5" />
+              ) : (
+                <Sun className="w-5 h-5" />
+              )}
+            </Button>
             <SignInButton>
               <Button variant="ghost" size="sm">
                 Sign In
               </Button>
             </SignInButton>
-            {/* <SignInButton>
-              <Button size="sm" className="bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70">
-                Get Started
-              </Button>
-            </SignInButton> */}
           </div>
         </div>
       </div>

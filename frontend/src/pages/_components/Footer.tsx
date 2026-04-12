@@ -21,7 +21,7 @@ export default function Footer() {
               </span>
             </div>
             <p className="text-muted-foreground max-w-sm mb-6">
-              The ultimate event discovery platform for IIT Kanpur. 
+              The Ultimate Event Discovery Platform for IIT Kanpur.
               Never miss a campus moment again.
             </p>
             <div className="flex gap-4">

@@ -1,14 +1,43 @@
 import { motion } from "motion/react";
 import { Button } from "@/components/ui/button.tsx";
 import { Link } from "react-router-dom";
-import { ArrowRight, Sparkles, Users, Calendar } from "lucide-react";
+import { ArrowRight, Building2, Users, Calendar } from "lucide-react";
+import { useEffect, useState } from "react";
+
+function AnimatedCounter({ end, duration = 2, suffix = "" }: { end: number, duration?: number, suffix?: string }) {
+  const [count, setCount] = useState(0);
+
+  useEffect(() => {
+    let startTime: number | null = null;
+    let animationFrame: number;
+
+    const animateParams = (timestamp: number) => {
+      if (!startTime) startTime = timestamp;
+      const progress = timestamp - startTime;
+      const percentage = Math.min(progress / (duration * 1000), 1);
+      
+      const easeOutCube = 1 - Math.pow(1 - percentage, 3);
+      setCount(Math.floor(easeOutCube * end));
+
+      if (percentage < 1) {
+        animationFrame = requestAnimationFrame(animateParams);
+      }
+    };
+
+    animationFrame = requestAnimationFrame(animateParams);
+
+    return () => cancelAnimationFrame(animationFrame);
+  }, [end, duration]);
+
+  return <span>{count}{suffix}</span>;
+}
 
 export default function Hero() {
   return (
     <section className="relative min-h-screen flex items-center justify-center overflow-hidden pt-16">
       {/* Background gradient */}
       <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-background to-accent/5" />
-      
+
       {/* Animated orbs */}
       <motion.div
         className="absolute top-1/4 left-1/4 w-96 h-96 bg-primary/10 rounded-full blur-3xl"
@@ -29,22 +58,11 @@ export default function Hero() {
 
       <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
         <div className="text-center">
-          {/* Badge */}
-          <motion.div
-            initial={{ y: 20, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            transition={{ delay: 0.1 }}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 border border-primary/20 mb-8"
-          >
-            <Sparkles className="w-4 h-4 text-primary" />
-            <span className="text-sm font-medium text-primary">Built for IIT Kanpur</span>
-          </motion.div>
-
           {/* Headline */}
           <motion.h1
             initial={{ y: 20, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
-            transition={{ delay: 0.2 }}
+            transition={{ delay: 0.1 }}
             className="text-5xl sm:text-6xl lg:text-7xl font-bold tracking-tight text-balance mb-6"
             style={{ fontFamily: "var(--font-display)" }}
           >
@@ -58,10 +76,10 @@ export default function Hero() {
           <motion.p
             initial={{ y: 20, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
-            transition={{ delay: 0.3 }}
+            transition={{ delay: 0.2 }}
             className="text-xl text-muted-foreground max-w-2xl mx-auto mb-10 text-balance"
           >
-            Discover events from councils, clubs, and organizations. 
+            Discover events from councils, clubs, and organizations.
             Engage with your campus community like never before.
           </motion.p>
 
@@ -69,7 +87,7 @@ export default function Hero() {
           <motion.div
             initial={{ y: 20, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
-            transition={{ delay: 0.4 }}
+            transition={{ delay: 0.3 }}
             className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-16"
           >
             <Button size="lg" className="gap-2 bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 shadow-xl shadow-primary/20" asChild>
@@ -87,28 +105,34 @@ export default function Hero() {
           <motion.div
             initial={{ y: 20, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
-            transition={{ delay: 0.5 }}
+            transition={{ delay: 0.4 }}
             className="grid grid-cols-3 gap-8 max-w-lg mx-auto"
           >
             <div className="text-center">
               <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-primary/10 mx-auto mb-3">
                 <Calendar className="w-6 h-6 text-primary" />
               </div>
-              <p className="text-2xl font-bold" style={{ fontFamily: "var(--font-display)" }}>500+</p>
+              <p className="text-2xl font-bold" style={{ fontFamily: "var(--font-display)" }}>
+                <AnimatedCounter end={500} suffix="+" />
+              </p>
               <p className="text-sm text-muted-foreground">Events Yearly</p>
             </div>
             <div className="text-center">
               <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-accent/10 mx-auto mb-3">
                 <Users className="w-6 h-6 text-accent" />
               </div>
-              <p className="text-2xl font-bold" style={{ fontFamily: "var(--font-display)" }}>10K+</p>
+              <p className="text-2xl font-bold" style={{ fontFamily: "var(--font-display)" }}>
+                <AnimatedCounter end={10} suffix="K+" />
+              </p>
               <p className="text-sm text-muted-foreground">Active Users</p>
             </div>
             <div className="text-center">
               <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-primary/10 mx-auto mb-3">
-                <Sparkles className="w-6 h-6 text-primary" />
+                <Building2 className="w-6 h-6 text-primary" />
               </div>
-              <p className="text-2xl font-bold" style={{ fontFamily: "var(--font-display)" }}>50+</p>
+              <p className="text-2xl font-bold" style={{ fontFamily: "var(--font-display)" }}>
+                <AnimatedCounter end={50} suffix="+" />
+              </p>
               <p className="text-sm text-muted-foreground">Organizations</p>
             </div>
           </motion.div>
@@ -118,7 +142,7 @@ export default function Hero() {
         <motion.div
           initial={{ y: 40, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
-          transition={{ delay: 0.6, duration: 0.8 }}
+          transition={{ delay: 0.5, duration: 0.8 }}
           className="mt-20 relative"
         >
           <div className="relative mx-auto max-w-5xl">
