@@ -2,9 +2,10 @@ import { Link, useNavigate } from "react-router-dom";
 import { motion } from "motion/react";
 import { Button } from "@/components/ui/button.tsx";
 import { Badge } from "@/components/ui/badge.tsx";
+import { Alert, AlertDescription } from "@/components/ui/alert.tsx";
 import { SignInButton } from "@/components/ui/signin.tsx";
 import { useAuth } from "@/hooks/use-auth.ts";
-import { Menu, Moon, Sun, UserPlus, LogOut } from "lucide-react";
+import { Menu, Moon, Sun, UserPlus, LogOut, Building2, ShieldCheck } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useTheme } from "next-themes";
 import { useThemeFlip } from "@/components/providers/theme.tsx";
@@ -24,7 +25,23 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu.tsx";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog.tsx";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select.tsx";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar.tsx";
+import { toast } from "sonner";
 
 type FeedHeaderProps = {
   isForYouActive?: boolean;
@@ -344,26 +361,33 @@ export default function FeedHeader({
         </div>
 
       </div>
+      <Dialog open={showRequestModal} onOpenChange={setShowRequestModal}>
+        <DialogContent className="max-w-[min(92vw,34rem)] overflow-hidden rounded-[1.75rem] border-border/70 bg-[linear-gradient(180deg,rgba(255,250,242,0.98),rgba(255,255,255,0.98))] p-0 shadow-[0_28px_90px_rgba(15,23,42,0.22)] dark:bg-[linear-gradient(180deg,rgba(30,41,59,0.98),rgba(15,23,42,0.98))]">
+          <DialogHeader className="border-b border-border/60 px-6 py-5 text-left">
+            <div className="flex items-start gap-4">
+              <div className="rounded-2xl bg-primary/10 p-3 text-primary">
+                <Building2 className="h-5 w-5" />
+              </div>
+              <div className="space-y-1">
+                <DialogTitle className="text-xl">Request Organization Access</DialogTitle>
+                <DialogDescription className="max-w-md text-sm leading-6">
+                  Pick the organization you want to join. Your request goes to admins for review and usually gets a response within 24 hours.
+                </DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
 
-      {/* Request Organization Modal */}
-      {showRequestModal && (
-        <div className="fixed inset-0 z-[70] flex items-start justify-center overflow-y-auto bg-black/50 px-4 py-8 sm:items-center">
-          <div className="my-auto max-h-[calc(100vh-2rem)] w-full max-w-md overflow-y-auto rounded-lg bg-background p-6 shadow-xl">
-            <h2 className="text-lg font-semibold mb-4">Request Organization Access</h2>
-            <p className="text-sm text-muted-foreground mb-4">
-              Select an organization to request access. Admins will review your request and respond within 24 hours.
-            </p>
+          <div className="px-6 py-5">
+            <div className="mb-4 rounded-[1.25rem] border border-emerald-200/70 bg-emerald-50/80 p-4 text-sm text-emerald-950 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-100">
+              <div className="flex items-start gap-3">
+                <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" />
+                <p>Use your IITK account to request organizer access for a club, council, festival, or department workspace.</p>
+              </div>
+            </div>
             <OrganizationRequestForm onClose={() => setShowRequestModal(false)} />
-            <Button
-              variant="outline"
-              className="w-full mt-4"
-              onClick={() => setShowRequestModal(false)}
-            >
-              Close
-            </Button>
           </div>
-        </div>
-      )}
+        </DialogContent>
+      </Dialog>
     </motion.header>
   );
 }
@@ -373,7 +397,8 @@ function OrganizationRequestForm({ onClose }: { onClose: () => void }) {
   const [organizations, setOrganizations] = useState<any[]>([]);
   const [selectedOrgId, setSelectedOrgId] = useState('');
   const [isLoading, setIsLoading] = useState(true);
-  const { user } = useAuth();
+  const [error, setError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     const fetchOrgs = async () => {
@@ -382,6 +407,7 @@ function OrganizationRequestForm({ onClose }: { onClose: () => void }) {
         setOrganizations(orgs);
       } catch (err) {
         console.error('Failed to fetch organizations:', err);
+        setError('Could not load organizations right now.');
       } finally {
         setIsLoading(false);
       }
@@ -393,9 +419,11 @@ function OrganizationRequestForm({ onClose }: { onClose: () => void }) {
     if (!selectedOrgId) return;
 
     try {
-      setIsLoading(true);
+      setIsSubmitting(true);
+      setError(null);
       const token = localStorage.getItem('authToken');
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/organization-requests/${selectedOrgId}/request-access`, {
+      const apiBaseUrl = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? '/api' : 'http://localhost:3001/api');
+      const response = await fetch(`${apiBaseUrl}/organization-requests/${selectedOrgId}/request-access`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -404,19 +432,17 @@ function OrganizationRequestForm({ onClose }: { onClose: () => void }) {
       });
 
       if (response.ok) {
-        alert('Request sent successfully! Admins will review it soon.');
+        toast.success('Request sent successfully');
         onClose();
-        // Refresh membership status
-        window.location.reload();
       } else {
         const errorData = await response.json();
-        alert(errorData.error || 'Failed to send request');
+        setError(errorData.error || 'Failed to send request');
       }
     } catch (err) {
       console.error('Error sending request:', err);
-      alert('Failed to send request');
+      setError('Failed to send request');
     } finally {
-      setIsLoading(false);
+      setIsSubmitting(false);
     }
   };
 
@@ -425,28 +451,54 @@ function OrganizationRequestForm({ onClose }: { onClose: () => void }) {
   }
 
   const options = buildOrganizationOptions(organizations);
+  const selectedLabel = options.find((opt) => opt.id === selectedOrgId)?.label;
 
   return (
-    <div className="space-y-3">
-      <select
-        value={selectedOrgId}
-        onChange={(e) => setSelectedOrgId(e.target.value)}
-        className="w-full px-3 py-2 rounded-lg bg-background border border-input text-sm"
-      >
-        <option value="">Select an organization</option>
-        {options.map((opt) => (
-          <option key={opt.id} value={opt.id} disabled={opt.disabled}>
-            {opt.label}
-          </option>
-        ))}
-      </select>
-      <Button
-        className="w-full"
-        onClick={handleSubmit}
-        disabled={!selectedOrgId || isLoading}
-      >
-        Send Request
-      </Button>
+    <div className="space-y-4">
+      {error && (
+        <Alert variant="destructive">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+
+      <div className="space-y-2">
+        <p className="text-sm font-medium text-foreground">Choose organization</p>
+        <Select value={selectedOrgId} onValueChange={setSelectedOrgId}>
+          <SelectTrigger className="h-12 w-full rounded-2xl border-border/70 bg-background/90 px-4 text-left shadow-sm">
+            <SelectValue placeholder="Select an organization" />
+          </SelectTrigger>
+          <SelectContent
+            position="popper"
+            sideOffset={8}
+            className="max-h-80 w-[var(--radix-select-trigger-width)] rounded-2xl border-border/70 bg-background/98 p-2 shadow-[0_18px_48px_rgba(15,23,42,0.18)] backdrop-blur-xl"
+          >
+            {options.map((opt) => (
+              <SelectItem
+                key={opt.id}
+                value={opt.id}
+                disabled={opt.disabled}
+                className={`min-h-10 rounded-xl px-3 ${opt.disabled ? "font-semibold uppercase tracking-[0.18em] text-[11px] text-muted-foreground" : ""}`}
+              >
+                {opt.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {selectedLabel ? <p className="text-xs text-muted-foreground">Selected: {selectedLabel}</p> : null}
+      </div>
+
+      <DialogFooter className="pt-2">
+        <Button variant="outline" className="rounded-full" onClick={onClose} disabled={isSubmitting}>
+          Cancel
+        </Button>
+        <Button
+          className="rounded-full px-6 shadow-[0_12px_30px_rgba(14,116,144,0.18)]"
+          onClick={handleSubmit}
+          disabled={!selectedOrgId || isSubmitting}
+        >
+          {isSubmitting ? 'Sending...' : 'Send Request'}
+        </Button>
+      </DialogFooter>
     </div>
   );
 }

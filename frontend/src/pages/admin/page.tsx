@@ -29,6 +29,8 @@ import {
 import { eventsAPI, organizationsAPI, authAPI, organizationRequestsAPI, organizerAPI } from '@/lib/api';
 import { Alert, AlertDescription } from '@/components/ui/alert.tsx';
 import { buildOrganizationOptions } from '@/lib/org-hierarchy.ts';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select.tsx';
+import { toast } from 'sonner';
 
 interface Organization {
   _id: string;
@@ -1957,6 +1959,7 @@ function OrganizationRequestForm({ onClose, onSuccess }: { onClose: () => void; 
   const [selectedOrgId, setSelectedOrgId] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     const fetchOrgs = async () => {
@@ -1977,10 +1980,11 @@ function OrganizationRequestForm({ onClose, onSuccess }: { onClose: () => void; 
     if (!selectedOrgId) return;
 
     try {
-      setIsLoading(true);
+      setIsSubmitting(true);
       setError(null);
       const token = localStorage.getItem('authToken');
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/organization-requests/${selectedOrgId}/request-access`, {
+      const apiBaseUrl = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? '/api' : 'http://localhost:3001/api');
+      const response = await fetch(`${apiBaseUrl}/organization-requests/${selectedOrgId}/request-access`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1989,7 +1993,7 @@ function OrganizationRequestForm({ onClose, onSuccess }: { onClose: () => void; 
       });
 
       if (response.ok) {
-        alert('Request sent successfully! Admins will review it soon.');
+        toast.success('Request sent successfully');
         onSuccess?.();
         onClose();
       } else {
@@ -2000,7 +2004,7 @@ function OrganizationRequestForm({ onClose, onSuccess }: { onClose: () => void; 
       console.error('Error sending request:', err);
       setError('Failed to send request');
     } finally {
-      setIsLoading(false);
+      setIsSubmitting(false);
     }
   };
 
@@ -2009,33 +2013,48 @@ function OrganizationRequestForm({ onClose, onSuccess }: { onClose: () => void; 
   }
 
   const options = buildOrganizationOptions(organizations);
+  const selectedLabel = options.find((opt) => opt.id === selectedOrgId)?.label;
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       {error && (
         <Alert variant="destructive">
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
-      <select
-        value={selectedOrgId}
-        onChange={(e) => setSelectedOrgId(e.target.value)}
-        className="w-full px-3 py-2 rounded-lg bg-background border border-input text-sm"
-        disabled={isLoading}
-      >
-        <option value="">Select an organization</option>
-        {options.map((opt) => (
-          <option key={opt.id} value={opt.id} disabled={opt.disabled}>
-            {opt.label}
-          </option>
-        ))}
-      </select>
+      <div className="space-y-2">
+        <p className="text-sm font-medium text-foreground">Choose organization</p>
+        <Select value={selectedOrgId} onValueChange={setSelectedOrgId} disabled={isSubmitting}>
+          <SelectTrigger className="h-12 w-full rounded-2xl border-border/70 bg-background/90 px-4 text-left shadow-sm">
+            <SelectValue placeholder="Select an organization" />
+          </SelectTrigger>
+          <SelectContent
+            position="popper"
+            sideOffset={8}
+            className="max-h-80 w-[var(--radix-select-trigger-width)] rounded-2xl border-border/70 bg-background/98 p-2 shadow-[0_18px_48px_rgba(15,23,42,0.18)] backdrop-blur-xl"
+          >
+            {options.map((opt) => (
+              <SelectItem
+                key={opt.id}
+                value={opt.id}
+                disabled={opt.disabled}
+                className={`min-h-10 rounded-xl px-3 ${opt.disabled ? 'font-semibold uppercase tracking-[0.18em] text-[11px] text-muted-foreground' : ''}`}
+              >
+                {opt.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <p className="text-xs text-muted-foreground">
+          {selectedLabel ? `Selected: ${selectedLabel}` : 'Choose the workspace you want access to.'}
+        </p>
+      </div>
       <Button
         className="w-full"
         onClick={handleSubmit}
-        disabled={!selectedOrgId || isLoading}
+        disabled={!selectedOrgId || isSubmitting}
       >
-        {isLoading ? 'Sending...' : 'Send Request'}
+        {isSubmitting ? 'Sending...' : 'Send Request'}
       </Button>
     </div>
   );
