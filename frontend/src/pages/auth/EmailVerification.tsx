@@ -8,6 +8,27 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Mail, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
+const API_BASE_URL =
+  import.meta.env.VITE_API_URL ||
+  (import.meta.env.DEV ? '/api' : 'http://localhost:3001/api');
+
+async function parseJsonSafely(response: Response): Promise<Record<string, any> | null> {
+  const text = await response.text();
+  if (!text) return null;
+
+  try {
+    return JSON.parse(text) as Record<string, any>;
+  } catch {
+    return null;
+  }
+}
+
+function getErrorMessage(payload: Record<string, any> | null, fallback: string): string {
+  return typeof payload?.error === 'string' && payload.error.trim().length > 0
+    ? payload.error
+    : fallback;
+}
+
 export default function EmailVerificationPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -51,19 +72,18 @@ export default function EmailVerificationPage() {
 
     setIsLoading(true);
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/auth/send-verification-code`, {
+      const response = await fetch(`${API_BASE_URL}/auth/send-verification-code`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: emailToUse }),
       });
 
+      const payload = await parseJsonSafely(response);
       if (!response.ok) {
-        const payload = await response.json();
-        setError(payload.error || 'Failed to send verification code');
+        setError(getErrorMessage(payload, 'Failed to send verification code'));
         return;
       }
 
-      await response.json();
       setIitEmail(emailToUse);
       setSuccess('Verification code sent to your email.');
       toast.success('Check your email for the verification code');
@@ -90,7 +110,7 @@ export default function EmailVerificationPage() {
         return;
       }
 
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/auth/verify-code`, {
+      const response = await fetch(`${API_BASE_URL}/auth/verify-code`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -99,13 +119,13 @@ export default function EmailVerificationPage() {
         }),
       });
 
+      const payload = await parseJsonSafely(response);
       if (!response.ok) {
-        const payload = await response.json();
-        setError(payload.error || 'Failed to verify code');
+        setError(getErrorMessage(payload, 'Failed to verify code'));
         return;
       }
 
-      const data = await response.json();
+      const data = payload || {};
       if (typeof data.verificationToken === 'string') {
         setVerificationToken(data.verificationToken);
       } else {
@@ -146,15 +166,15 @@ export default function EmailVerificationPage() {
     setResendCooldown(60);
 
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/auth/send-verification-code`, {
+      const response = await fetch(`${API_BASE_URL}/auth/send-verification-code`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: normalizeEmail(iitEmail) }),
       });
 
+      const payload = await parseJsonSafely(response);
       if (!response.ok) {
-        const payload = await response.json();
-        setError(payload.error || 'Failed to send code');
+        setError(getErrorMessage(payload, 'Failed to send code'));
         return;
       }
 
@@ -193,7 +213,7 @@ export default function EmailVerificationPage() {
         return;
       }
 
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/auth/set-password`, {
+      const response = await fetch(`${API_BASE_URL}/auth/set-password`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -203,13 +223,13 @@ export default function EmailVerificationPage() {
         }),
       });
 
+      const payload = await parseJsonSafely(response);
       if (!response.ok) {
-        const payload = await response.json();
-        setError(payload.error || 'Failed to set password');
+        setError(getErrorMessage(payload, 'Failed to set password'));
         return;
       }
 
-      const data = await response.json();
+      const data = payload || {};
       if (data.token) localStorage.setItem('authToken', data.token);
       if (data.user) localStorage.setItem('user', JSON.stringify(data.user));
       window.dispatchEvent(new Event('auth-state-changed'));
