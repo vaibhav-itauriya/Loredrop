@@ -126,7 +126,8 @@ function EventCard({
   const [showComments, setShowComments] = useState(false);
   const [commentText, setCommentText] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [subscribed, setSubscribed] = useState(isSubscribed);
+  const [pendingSubscribed, setPendingSubscribed] = useState<boolean | null>(null);
+  const subscribed = pendingSubscribed ?? isSubscribed;
   const [mediaDialogOpen, setMediaDialogOpen] = useState(false);
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [selectedMediaIndex, setSelectedMediaIndex] = useState(0);
@@ -142,7 +143,7 @@ function EventCard({
   }, [event]);
 
   useEffect(() => {
-    setSubscribed(isSubscribed);
+    setPendingSubscribed(null);
   }, [isSubscribed]);
 
   useEffect(() => {
@@ -258,14 +259,23 @@ function EventCard({
       return;
     }
 
-    const startTime = new Date(localEvent.dateTime).toISOString().replace(/[-:]/g, "").split(".")[0];
-    const endTime = localEvent.endDateTime
-      ? new Date(localEvent.endDateTime).toISOString().replace(/[-:]/g, "").split(".")[0]
-      : new Date(new Date(localEvent.dateTime).getTime() + 60 * 60 * 1000).toISOString().replace(/[-:]/g, "").split(".")[0];
+    const formatGcalUtc = (date: Date) =>
+      `${date.toISOString().replace(/[-:]/g, "").split(".")[0]}Z`;
+
+    const startDate = new Date(localEvent.dateTime);
+    const endDate = localEvent.endDateTime
+      ? new Date(localEvent.endDateTime)
+      : new Date(startDate.getTime() + 60 * 60 * 1000);
+    const startTime = formatGcalUtc(startDate);
+    const endTime = formatGcalUtc(endDate);
+    const viewerTimeZone =
+      Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Kolkata";
 
     const googleCalendarUrl = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(
       localEvent.title
-    )}&dates=${startTime}/${endTime}&details=${encodeURIComponent(
+    )}&dates=${startTime}/${endTime}&ctz=${encodeURIComponent(
+      viewerTimeZone
+    )}&details=${encodeURIComponent(
       localEvent.description
     )}&location=${encodeURIComponent(localEvent.venue)}&sf=true`;
 
@@ -325,19 +335,19 @@ function EventCard({
     }
     if (!org?._id) return;
 
+    const willBe = !subscribed;
+    setPendingSubscribed(willBe);
     try {
-      if (subscribed) {
-        await organizationsAPI.unsubscribeFromOrganization(String(org._id));
-        setSubscribed(false);
-        onSubscriptionChange?.(String(org._id), false);
-        toast.success(`Unsubscribed from ${org?.name || "organization"}`);
-      } else {
+      if (willBe) {
         await organizationsAPI.subscribeToOrganization(String(org._id));
-        setSubscribed(true);
-        onSubscriptionChange?.(String(org._id), true);
         toast.success(`Subscribed to ${org?.name || "organization"}`);
+      } else {
+        await organizationsAPI.unsubscribeFromOrganization(String(org._id));
+        toast.success(`Unsubscribed from ${org?.name || "organization"}`);
       }
+      onSubscriptionChange?.(String(org._id), willBe);
     } catch (error: any) {
+      setPendingSubscribed(null);
       toast.error(error?.message || "Failed to update subscription");
     }
   };

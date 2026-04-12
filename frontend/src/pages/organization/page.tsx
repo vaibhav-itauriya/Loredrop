@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ArrowLeft, CalendarDays, Check, Layers, Loader2, Plus } from "lucide-react";
 import EventCard from "../feed/_components/EventCard.tsx";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar.tsx";
 import { Badge } from "@/components/ui/badge.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import { Card } from "@/components/ui/card.tsx";
@@ -196,13 +197,19 @@ export default function OrganizationPage() {
           />
           <div className="p-5 sm:p-6">
             <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-              <div className="w-16 h-16 rounded-2xl border border-border/60 bg-background overflow-hidden flex items-center justify-center">
+              <Avatar className="h-16 w-16 rounded-2xl border border-border/60 bg-background">
                 {organization.logo ? (
-                  <img src={organization.logo} alt={organization.name} className="w-full h-full object-cover" />
-                ) : (
-                  <Layers className="w-8 h-8 text-muted-foreground" />
-                )}
-              </div>
+                  <AvatarImage
+                    src={organization.logo}
+                    alt={organization.name}
+                    referrerPolicy="no-referrer"
+                    className="h-full w-full object-cover"
+                  />
+                ) : null}
+                <AvatarFallback className="rounded-2xl bg-gradient-to-br from-primary/15 to-accent/15 text-lg font-semibold text-primary">
+                  {organization.name?.charAt(0)?.toUpperCase() || <Layers className="w-8 h-8 text-muted-foreground" />}
+                </AvatarFallback>
+              </Avatar>
               <div className="min-w-0">
                 <h1 className="text-2xl sm:text-3xl font-bold truncate" style={{ fontFamily: "var(--font-display)" }}>
                   {organization.name}

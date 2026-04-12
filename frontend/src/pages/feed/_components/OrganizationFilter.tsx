@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Button } from "@/components/ui/button.tsx";
 import { Badge } from "@/components/ui/badge.tsx";
 import { cn } from "@/lib/utils.ts";
@@ -5,6 +6,28 @@ import { groupOrganizations } from "@/lib/org-hierarchy.ts";
 import { Check, Compass, Flame, Layers3, Plus, Sparkles, Users2 } from "lucide-react";
 
 type Organization = any;
+
+function OrgLogo({ org }: { org: Organization }) {
+  const [failed, setFailed] = useState(false);
+  const showImage = !!org.logo && !failed;
+  if (showImage) {
+    return (
+      <img
+        src={org.logo}
+        alt={org.name}
+        referrerPolicy="no-referrer"
+        loading="lazy"
+        onError={() => setFailed(true)}
+        className="h-6 w-6 rounded-lg object-cover"
+      />
+    );
+  }
+  return (
+    <span className="text-xs font-bold text-primary">
+      {(org.name || "?").charAt(0).toUpperCase()}
+    </span>
+  );
+}
 
 type OrganizationFilterProps = {
   organizations: Organization[];
@@ -76,17 +99,7 @@ export default function OrganizationFilter({
                 onClick={() => onSelect(org._id)}
               >
                 <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary/20 to-accent/20">
-                  {org.logo ? (
-                    <img
-                      src={org.logo}
-                      alt={org.name}
-                      className="h-6 w-6 rounded-lg object-cover"
-                    />
-                  ) : (
-                    <span className="text-xs font-bold text-primary">
-                      {org.name.charAt(0)}
-                    </span>
-                  )}
+                  <OrgLogo org={org} />
                 </div>
                 <div className="min-w-0 flex-1 text-left">
                   <p className="truncate text-sm font-medium">{org.name}</p>
@@ -123,17 +136,7 @@ export default function OrganizationFilter({
                 onClick={() => onSelect(org._id)}
               >
                 <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary/20 to-accent/20">
-                  {org.logo ? (
-                    <img
-                      src={org.logo}
-                      alt={org.name}
-                      className="h-6 w-6 rounded-lg object-cover"
-                    />
-                  ) : (
-                    <span className="text-xs font-bold text-primary">
-                      {org.name.charAt(0)}
-                    </span>
-                  )}
+                  <OrgLogo org={org} />
                 </div>
                 <span className="truncate text-sm">{org.name}</span>
               </Button>
@@ -160,17 +163,7 @@ export default function OrganizationFilter({
                 onClick={() => onSelect(org._id)}
               >
                 <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-accent/20 to-primary/20">
-                  {org.logo ? (
-                    <img
-                      src={org.logo}
-                      alt={org.name}
-                      className="h-6 w-6 rounded-lg object-cover"
-                    />
-                  ) : (
-                    <span className="text-xs font-bold text-accent">
-                      {org.name.charAt(0)}
-                    </span>
-                  )}
+                  <OrgLogo org={org} />
                 </div>
                 <span className="truncate text-sm">{org.name}</span>
               </Button>
@@ -197,17 +190,7 @@ export default function OrganizationFilter({
                 onClick={() => onSelect(org._id)}
               >
                 <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-muted to-muted/50">
-                  {org.logo ? (
-                    <img
-                      src={org.logo}
-                      alt={org.name}
-                      className="h-6 w-6 rounded-lg object-cover"
-                    />
-                  ) : (
-                    <span className="text-xs font-bold text-foreground">
-                      {org.name.charAt(0)}
-                    </span>
-                  )}
+                  <OrgLogo org={org} />
                 </div>
                 <span className="truncate text-sm">{org.name}</span>
               </Button>

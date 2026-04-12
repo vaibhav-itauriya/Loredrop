@@ -251,7 +251,7 @@ export default function FeedPage() {
     return () => {
       cancelled = true;
     };
-  }, [activeOrganizationIds, deferredSearchQuery, filters.audience, filters.dateRange, filters.eventMode, hasSearchQuery, isAuthenticated, isSubscribedSelected]);
+  }, [activeOrganizationIds, deferredSearchQuery, filters.audience, filters.dateRange, filters.eventMode, hasSearchQuery, isAuthenticated, isSubscribedSelected, feedMode]);
 
   const allKnownEvents = useMemo(() => {
     const merged = [...events, ...upcomingEvents, ...recommendedEvents];
@@ -277,7 +277,7 @@ export default function FeedPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [isUpcomingSelected]);
 
   const handleLoadMore = useCallback(async () => {
     if (isLoading) return;
@@ -350,8 +350,8 @@ export default function FeedPage() {
   const displayedEvents = useMemo(() => {
     const baseEvents = isSubscribedSelected
       ? events.filter((event) =>
-          subscribedOrgIds.includes(String(event.organizationId?._id || event.organizationId || "")),
-        )
+        subscribedOrgIds.includes(String(event.organizationId?._id || event.organizationId || "")),
+      )
       : [...events];
     if (isUpcomingSelected) {
       return baseEvents
@@ -431,7 +431,6 @@ export default function FeedPage() {
   }, [deferredSearchQuery, organizations]);
 
   const resetFeedView = useCallback(() => {
-    setFeedMode("forYou");
     setSelectedOrgId(null);
     setFilters({});
     setSearchQuery("");
@@ -618,10 +617,10 @@ export default function FeedPage() {
                     {isTrendingSelected
                       ? "Trending across campus"
                       : isUpcomingSelected
-                      ? "Upcoming campus events"
-                      : isSubscribedSelected
-                      ? "Posts from organizations you follow"
-                      : "Tune the feed in real time"}
+                        ? "Upcoming campus events"
+                        : isSubscribedSelected
+                          ? "Posts from organizations you follow"
+                          : "Tune the feed in real time"}
                   </h2>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
@@ -634,17 +633,17 @@ export default function FeedPage() {
                     {isTrendingSelected
                       ? "Trending"
                       : isUpcomingSelected
-                      ? "Upcoming"
-                      : isSubscribedSelected
-                      ? "Subscribed"
-                      : "For You"}
+                        ? "Upcoming"
+                        : isSubscribedSelected
+                          ? "Subscribed"
+                          : "For You"}
                   </Badge>
                   {activeFilterCount > 0 && (
                     <Badge variant="secondary" className="w-fit rounded-full border border-white/60 bg-white/70 px-3 py-1 text-slate-700 shadow-[0_8px_18px_rgba(15,23,42,0.06)] dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-200 dark:shadow-[0_8px_18px_rgba(2,6,23,0.24)]">
                       {activeFilterCount} active
                     </Badge>
                   )}
-                  {(selectedOrgId || activeFilterCount > 0 || feedMode !== "forYou") && (
+                  {(selectedOrgId || activeFilterCount > 0 || hasSearchQuery) && (
                     <Button variant="outline" size="sm" className="rounded-full border-white/60 bg-white/80 shadow-[0_8px_18px_rgba(15,23,42,0.06)] dark:border-slate-700 dark:bg-slate-900/80 dark:shadow-[0_8px_18px_rgba(2,6,23,0.24)]" onClick={resetFeedView}>
                       Reset Feed
                     </Button>
@@ -726,17 +725,17 @@ export default function FeedPage() {
                   <EmptyMedia variant="icon">
                     <Calendar />
                   </EmptyMedia>
-                    <EmptyTitle>No events found</EmptyTitle>
+                  <EmptyTitle>No events found</EmptyTitle>
                   <EmptyDescription>
                     {hasSearchQuery
                       ? "No posts matched this search. Try a broader keyword, or open one of the matching organizations above."
                       : isSubscribedSelected && isAuthenticated
-                      ? "Subscribe to organizations from any post to fill your subscribed feed."
-                      : isForYouSelected && isAuthenticated
-                      ? "For You is your campus-wide discovery feed. Subscribe to organizations to also build your Subscribed feed."
-                      : selectedOrgId || Object.keys(filters).length > 0
-                      ? "Try adjusting your filters or selecting a different organization."
-                      : "Check back soon for upcoming campus events!"}
+                        ? "Subscribe to organizations from any post to fill your subscribed feed."
+                        : isForYouSelected && isAuthenticated
+                          ? "For You is your campus-wide discovery feed. Subscribe to organizations to also build your Subscribed feed."
+                          : selectedOrgId || Object.keys(filters).length > 0
+                            ? "Try adjusting your filters or selecting a different organization."
+                            : "Check back soon for upcoming campus events!"}
                   </EmptyDescription>
                 </EmptyHeader>
               </Empty>

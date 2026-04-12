@@ -379,7 +379,20 @@ export default function CalendarPage() {
                         Click any day to review your saved events and compare them against class timings.
                       </p>
                     </div>
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="rounded-full px-3 py-1"
+                        onClick={() => {
+                          const today = new Date();
+                          setSelectedDate(today);
+                          setMonthCursor(today);
+                        }}
+                      >
+                        Today
+                      </Button>
                       <Badge variant="secondary" className="rounded-full px-3 py-1">
                         {format(monthCursor, "MMMM yyyy")}
                       </Badge>
