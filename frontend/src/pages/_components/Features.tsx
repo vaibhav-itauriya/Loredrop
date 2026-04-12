@@ -100,17 +100,33 @@ export default function Features() {
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
               transition={{ delay: index * 0.1 }}
-              className="group relative bg-card rounded-2xl p-6 border border-border/50 hover:border-primary/30 transition-all duration-300 hover:shadow-xl hover:shadow-primary/5"
+              className="group relative rounded-2xl border border-border/50 hover:border-primary/40 transition-all duration-300 hover:shadow-xl hover:shadow-primary/5 overflow-hidden"
             >
-              <div className={`inline-flex p-3 rounded-xl bg-gradient-to-br ${feature.color} mb-4`}>
-                <feature.icon className="w-6 h-6 text-white" />
+              {/* Fixed Background Image - Spans across all panes */}
+              <div 
+                className="absolute inset-0 z-0 opacity-30 mix-blend-luminosity transition-opacity duration-500 group-hover:opacity-50" 
+                style={{ 
+                  backgroundImage: "url('/assets/student-campus-life.jpg')",
+                  backgroundAttachment: "fixed",
+                  backgroundSize: "cover",
+                  backgroundPosition: "center"
+                }}
+              />
+              
+              {/* Overlay to ensure text readability */}
+              <div className="absolute inset-0 z-0 bg-background/80" />
+
+              <div className="relative z-10 p-6">
+                <div className={`inline-flex p-3 rounded-xl bg-gradient-to-br ${feature.color} mb-4 shadow-sm`}>
+                  <feature.icon className="w-6 h-6 text-white" />
+                </div>
+                <h3 className="text-lg font-semibold mb-2 text-foreground group-hover:text-primary transition-colors" style={{ fontFamily: "var(--font-display)" }}>
+                  {feature.title}
+                </h3>
+                <p className="text-sm text-muted-foreground/90 leading-relaxed font-medium">
+                  {feature.description}
+                </p>
               </div>
-              <h3 className="text-lg font-semibold mb-2" style={{ fontFamily: "var(--font-display)" }}>
-                {feature.title}
-              </h3>
-              <p className="text-sm text-muted-foreground leading-relaxed">
-                {feature.description}
-              </p>
             </motion.div>
           ))}
         </div>
