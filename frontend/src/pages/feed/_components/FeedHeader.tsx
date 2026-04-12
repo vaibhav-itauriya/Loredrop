@@ -4,9 +4,10 @@ import { Button } from "@/components/ui/button.tsx";
 import { Badge } from "@/components/ui/badge.tsx";
 import { SignInButton } from "@/components/ui/signin.tsx";
 import { useAuth } from "@/hooks/use-auth.ts";
-import { Menu, Moon, Sun, UserPlus, LogOut, Sparkles, Check } from "lucide-react";
+import { Menu, Moon, Sun, UserPlus, LogOut } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useTheme } from "next-themes";
+import { useThemeFlip } from "@/components/providers/theme.tsx";
 import NotificationBell from "@/components/NotificationBell.tsx";
 import { organizationsAPI, authAPI } from "@/lib/api";
 import { buildOrganizationOptions } from "@/lib/org-hierarchy.ts";
@@ -48,7 +49,8 @@ export default function FeedHeader({
 }: FeedHeaderProps) {
   const { user, isAuthenticated, removeUser } = useAuth();
   const navigate = useNavigate();
-  const { theme, setTheme } = useTheme();
+  const { theme } = useTheme();
+  const { flipTheme } = useThemeFlip();
   const [isOrgMember, setIsOrgMember] = useState(false);
   const [isMainAdmin, setIsMainAdmin] = useState(false);
   const [manageableOrgSlug, setManageableOrgSlug] = useState<string | null>(null);
@@ -150,7 +152,6 @@ export default function FeedHeader({
               className="rounded-full px-4 shadow-sm"
               onClick={onSelectForYou}
             >
-              <Sparkles className="mr-2 h-4 w-4" />
               For You
             </Button>
             <Button
@@ -159,7 +160,6 @@ export default function FeedHeader({
               className="rounded-full px-4 shadow-sm"
               onClick={onSelectSubscribed}
             >
-              <Check className="mr-2 h-4 w-4" />
               Subscribed
             </Button>
             <Button
@@ -194,7 +194,7 @@ export default function FeedHeader({
             <Button
               variant="ghost"
               size="icon"
-              onClick={() => setTheme(theme === "light" ? "dark" : "light")}
+              onClick={flipTheme}
               title="Toggle theme"
             >
               {theme === "light" ? (
@@ -347,8 +347,8 @@ export default function FeedHeader({
 
       {/* Request Organization Modal */}
       {showRequestModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-background rounded-lg p-6 max-w-md w-full mx-4">
+        <div className="fixed inset-0 z-[70] flex items-start justify-center overflow-y-auto bg-black/50 px-4 py-8 sm:items-center">
+          <div className="my-auto max-h-[calc(100vh-2rem)] w-full max-w-md overflow-y-auto rounded-lg bg-background p-6 shadow-xl">
             <h2 className="text-lg font-semibold mb-4">Request Organization Access</h2>
             <p className="text-sm text-muted-foreground mb-4">
               Select an organization to request access. Admins will review your request and respond within 24 hours.

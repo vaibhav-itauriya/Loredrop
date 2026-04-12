@@ -488,6 +488,11 @@ router.post('/', authMiddleware, async (req: Request, res: Response) => {
     if (Number.isNaN(requestedDateTime.getTime()) || Number.isNaN(requestedEndDateTime.getTime())) {
       return res.status(400).json({ error: 'Invalid event date or time' });
     }
+    const currentMinute = new Date();
+    currentMinute.setSeconds(0, 0);
+    if (requestedDateTime < currentMinute) {
+      return res.status(400).json({ error: 'Event start time cannot be in the past' });
+    }
     if (requestedEndDateTime <= requestedDateTime) {
       return res.status(400).json({ error: 'End time must be after start time' });
     }
@@ -653,6 +658,11 @@ router.patch('/:eventId', authMiddleware, async (req: Request, res: Response) =>
 
     if (Number.isNaN(nextStart.getTime()) || (nextEnd && Number.isNaN(nextEnd.getTime()))) {
       return res.status(400).json({ error: 'Invalid event date or time' });
+    }
+    const currentMinute = new Date();
+    currentMinute.setSeconds(0, 0);
+    if (nextStart < currentMinute) {
+      return res.status(400).json({ error: 'Event start time cannot be in the past' });
     }
     if (nextEnd && nextEnd <= nextStart) {
       return res.status(400).json({ error: 'End time must be after start time' });

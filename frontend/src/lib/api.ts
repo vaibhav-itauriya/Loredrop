@@ -260,6 +260,19 @@ export const authAPI = {
     return fetchWithAuth(`${API_BASE_URL}/auth/me`);
   },
 
+  getAcademicTimetable: () => {
+    return fetchWithAuth(`${API_BASE_URL}/auth/academic-timetable`, {
+      disableCache: true,
+    });
+  },
+
+  updateAcademicTimetable: (slots: any[]) => {
+    return fetchWithAuth(`${API_BASE_URL}/auth/academic-timetable`, {
+      method: 'PUT',
+      body: JSON.stringify({ slots }),
+    });
+  },
+
   updateProfile: (data: { displayName?: string; name?: string; rollNo?: string; branch?: string; avatar?: string; academicLevel?: string; isAlumni?: boolean }) => {
     return fetchWithAuth(`${API_BASE_URL}/auth/profile`, {
       method: 'PATCH',

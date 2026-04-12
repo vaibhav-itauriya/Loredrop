@@ -18,6 +18,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { interactionsAPI } from "@/lib/api";
+import { useAcademicTimetable } from "@/hooks/use-academic-timetable.ts";
 import { Calendar } from "@/components/ui/calendar.tsx";
 import { Badge } from "@/components/ui/badge.tsx";
 import { Card } from "@/components/ui/card.tsx";
@@ -25,6 +26,7 @@ import { Skeleton } from "@/components/ui/skeleton.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import { Input } from "@/components/ui/input.tsx";
 import { useAuth } from "@/hooks/use-auth.ts";
+import { toMinutes } from "@/lib/planner.ts";
 import { toast } from "sonner";
 
 type SavedCalendarItem = {
@@ -58,15 +60,10 @@ type TimetableSlot = {
   day: number;
   startTime: string;
   endTime: string;
+  location?: string;
 };
 
-const STORAGE_KEY = "loredrop-sidebar-timetable-v1";
 const WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-
-function toMinutes(time: string) {
-  const [hours, minutes] = time.split(":").map(Number);
-  return hours * 60 + minutes;
-}
 
 function getWeekdayIndex(date: Date) {
   return (date.getDay() + 6) % 7;
@@ -85,26 +82,11 @@ export default function PersonalCalendarCard() {
   const [upcomingOnly, setUpcomingOnly] = useState(true);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<"month" | "week">("month");
-  const [slots, setSlots] = useState<TimetableSlot[]>([]);
+  const { slots, setSlots } = useAcademicTimetable();
   const [slotTitle, setSlotTitle] = useState("");
   const [slotDay, setSlotDay] = useState("0");
   const [slotStart, setSlotStart] = useState("09:00");
   const [slotEnd, setSlotEnd] = useState("10:00");
-
-  useEffect(() => {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (!stored) return;
-    try {
-      const parsed = JSON.parse(stored);
-      if (Array.isArray(parsed)) setSlots(parsed);
-    } catch {
-      console.error("Failed to parse saved timetable");
-    }
-  }, []);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(slots));
-  }, [slots]);
 
   useEffect(() => {
     const fetchSavedEvents = async (showError = true) => {
@@ -252,6 +234,7 @@ export default function PersonalCalendarCard() {
   };
 
   const addSlot = () => {
+    if (!isAuthenticated) return toast.error("Sign in to manage your academic planner");
     if (!slotTitle.trim()) return toast.error("Add a class title");
     if (toMinutes(slotEnd) <= toMinutes(slotStart)) return toast.error("End time must be after start time");
     setSlots((current) => [
@@ -390,9 +373,9 @@ export default function PersonalCalendarCard() {
                 <Input type="time" value={slotStart} onChange={(e) => setSlotStart(e.target.value)} className="h-9 text-xs" />
                 <Input type="time" value={slotEnd} onChange={(e) => setSlotEnd(e.target.value)} className="h-9 text-xs" />
               </div>
-              <Button size="sm" className="w-full" onClick={addSlot}>
+              <Button size="sm" className="w-full" onClick={addSlot} disabled={!isAuthenticated}>
                 <Plus className="mr-2 h-4 w-4" />
-                Add Slot
+                {isAuthenticated ? "Add Slot" : "Sign in to add"}
               </Button>
             </div>
           </div>

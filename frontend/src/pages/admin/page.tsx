@@ -227,6 +227,12 @@ export default function AdminPage() {
     eventId: '',
   });
   const messageBottomRef = useRef<HTMLDivElement | null>(null);
+  const minEventDateTime = useMemo(() => {
+    const now = new Date();
+    now.setSeconds(0, 0);
+    const offset = now.getTimezoneOffset();
+    return new Date(now.getTime() - offset * 60 * 1000).toISOString().slice(0, 16);
+  }, []);
 
   const liveConflicts = useMemo(() => {
     if (!eventForm.dateTime || !events.length) return [];
@@ -249,12 +255,22 @@ export default function AdminPage() {
   }, [eventForm.dateTime, eventForm.endDateTime, events]);
 
   const eventTimeError = useMemo(() => {
-    if (!eventForm.dateTime || !eventForm.endDateTime) return '';
+    if (!eventForm.dateTime) return '';
 
     const start = new Date(eventForm.dateTime);
+    if (Number.isNaN(start.getTime())) {
+      return 'Enter a valid start time.';
+    }
+    const now = new Date();
+    now.setSeconds(0, 0);
+    if (start < now) {
+      return 'Start time cannot be in the past.';
+    }
+    if (!eventForm.endDateTime) return '';
+
     const end = new Date(eventForm.endDateTime);
-    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
-      return 'Enter a valid start and end time.';
+    if (Number.isNaN(end.getTime())) {
+      return 'Enter a valid end time.';
     }
     if (end <= start) {
       return 'End time must be after start time.';
@@ -735,6 +751,10 @@ export default function AdminPage() {
           ? [urlImage]
           : [];
       const parsedCapacity = eventForm.capacity ? parseInt(eventForm.capacity, 10) : undefined;
+      if (new Date(eventForm.dateTime) < new Date()) {
+        setError('Start time cannot be in the past.');
+        return;
+      }
       if (eventForm.endDateTime && new Date(eventForm.endDateTime) <= new Date(eventForm.dateTime)) {
         setError('End time must be after start time.');
         return;
@@ -875,8 +895,8 @@ export default function AdminPage() {
 
           {/* Request Organization Modal */}
           {showRequestModal && (
-            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-              <div className="bg-background rounded-lg p-6 max-w-md w-full mx-4">
+            <div className="fixed inset-0 z-[70] flex items-start justify-center overflow-y-auto bg-black/50 px-4 py-8 sm:items-center">
+              <div className="my-auto max-h-[calc(100vh-2rem)] w-full max-w-md overflow-y-auto rounded-lg bg-background p-6 shadow-xl">
                 <h2 className="text-lg font-semibold mb-4">Request Organization Access</h2>
                 <p className="text-sm text-muted-foreground mb-4">
                   Select an organization to request access. Admins will review your request and respond within 24 hours.
@@ -1306,6 +1326,7 @@ export default function AdminPage() {
                             <Input
                               id="dateTime"
                               type="datetime-local"
+                              min={minEventDateTime}
                               value={eventForm.dateTime}
                               onChange={(e) => {
                                 setEventForm({ ...eventForm, dateTime: e.target.value });

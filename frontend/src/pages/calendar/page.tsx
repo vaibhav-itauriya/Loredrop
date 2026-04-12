@@ -28,6 +28,8 @@ import {
 import EventCard from "../feed/_components/EventCard.tsx";
 import { interactionsAPI, organizationsAPI } from "@/lib/api";
 import { useAuth } from "@/hooks/use-auth.ts";
+import { useAcademicTimetable } from "@/hooks/use-academic-timetable.ts";
+import { toMinutes } from "@/lib/planner.ts";
 import { Button } from "@/components/ui/button.tsx";
 import { Badge } from "@/components/ui/badge.tsx";
 import { Card } from "@/components/ui/card.tsx";
@@ -62,11 +64,10 @@ type AcademicSlot = {
   day: number;
   startTime: string;
   endTime: string;
-  location: string;
+  location?: string;
 };
 type ClashItem = { slot: AcademicSlot; event: PlannerEvent };
 
-const TIMETABLE_STORAGE_KEY = "loredrop-academic-timetable-v1";
 const WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const DEFAULT_SLOT_FORM = {
   title: "",
@@ -75,11 +76,6 @@ const DEFAULT_SLOT_FORM = {
   endTime: "10:00",
   location: "",
 };
-
-function toMinutes(time: string) {
-  const [hours, minutes] = time.split(":").map(Number);
-  return hours * 60 + minutes;
-}
 
 function getEventEnd(event: PlannerEvent) {
   if (event.endDateTime) return new Date(event.endDateTime);
@@ -95,30 +91,16 @@ function overlaps(startA: number, endA: number, startB: number, endB: number) {
 }
 
 export default function CalendarPage() {
+  const { isAuthenticated } = useAuth();
   const [savedEvents, setSavedEvents] = useState<SavedCalendarItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [monthCursor, setMonthCursor] = useState(new Date());
   const [plannerView, setPlannerView] = useState<"month" | "week">("month");
   const [slotForm, setSlotForm] = useState(DEFAULT_SLOT_FORM);
-  const [academicSlots, setAcademicSlots] = useState<AcademicSlot[]>([]);
+  const { slots: academicSlots, setSlots: setAcademicSlots } = useAcademicTimetable();
   const [subscribedOrgIds, setSubscribedOrgIds] = useState<Set<string>>(new Set());
-  const { isAuthenticated } = useAuth();
-
-  useEffect(() => {
-    const stored = localStorage.getItem(TIMETABLE_STORAGE_KEY);
-    if (!stored) return;
-    try {
-      const parsed = JSON.parse(stored);
-      if (Array.isArray(parsed)) setAcademicSlots(parsed);
-    } catch {
-      console.error("Failed to parse academic timetable");
-    }
-  }, []);
-
-  useEffect(() => {
-    localStorage.setItem(TIMETABLE_STORAGE_KEY, JSON.stringify(academicSlots));
-  }, [academicSlots]);
+  const plannerLocked = !isAuthenticated;
 
   useEffect(() => {
     const fetch = async () => {
@@ -277,6 +259,7 @@ export default function CalendarPage() {
   );
 
   const addSlot = () => {
+    if (!isAuthenticated) return toast.error("Sign in to manage your academic planner");
     const startMinutes = toMinutes(slotForm.startTime);
     const endMinutes = toMinutes(slotForm.endTime);
     if (!slotForm.title.trim()) return toast.error("Add a subject or class title");
@@ -296,6 +279,7 @@ export default function CalendarPage() {
   };
 
   const removeSlot = (slotId: string) => {
+    if (plannerLocked) return toast.error("Sign in to manage your academic planner");
     setAcademicSlots((current) => current.filter((slot) => slot.id !== slotId));
   };
 
@@ -353,7 +337,7 @@ export default function CalendarPage() {
             <Card className="rounded-[1.5rem] border-border/60 bg-background p-4">
               <p className="text-xs uppercase tracking-[0.25em] text-muted-foreground">Weekly Classes</p>
               <p className="mt-3 text-3xl font-semibold">{academicSlots.length}</p>
-              <p className="mt-1 text-sm text-muted-foreground">Local timetable blocks stored on this device.</p>
+              <p className="mt-1 text-sm text-muted-foreground">Recurring class blocks saved to your account.</p>
             </Card>
             <Card className="rounded-[1.5rem] border-border/60 bg-background p-4">
               <p className="text-xs uppercase tracking-[0.25em] text-muted-foreground">Potential Clashes</p>
@@ -594,9 +578,9 @@ export default function CalendarPage() {
                     <Input type="time" value={slotForm.endTime} onChange={(e) => setSlotForm((current) => ({ ...current, endTime: e.target.value }))} />
                     <Input value={slotForm.location} onChange={(e) => setSlotForm((current) => ({ ...current, location: e.target.value }))} placeholder="Room / building" />
                     <div className="md:col-span-6">
-                      <Button onClick={addSlot} className="rounded-full">
+                      <Button onClick={addSlot} className="rounded-full" disabled={plannerLocked}>
                         <Plus className="mr-2 h-4 w-4" />
-                        Add To Timetable
+                        {plannerLocked ? "Sign in to add classes" : "Add To Timetable"}
                       </Button>
                     </div>
                   </div>
@@ -681,7 +665,9 @@ export default function CalendarPage() {
                     <div>
                       <p className="text-sm font-semibold text-foreground">My Academic Timetable</p>
                       <p className="mt-1 text-sm text-muted-foreground">
-                        These entries stay in your browser, so you can build your own weekly routine.
+                        {plannerLocked
+                          ? "Sign in to build and keep your academic timetable with your account."
+                          : "These entries are saved to your account and restored after you log in."}
                       </p>
                     </div>
                     {academicSlots.length > 0 && <Badge variant="secondary" className="rounded-full px-3 py-1">{academicSlots.length} slots</Badge>}
@@ -700,7 +686,7 @@ export default function CalendarPage() {
                             <p className="mt-1 text-sm text-muted-foreground">{WEEKDAY_LABELS[slot.day]} · {slot.startTime}-{slot.endTime}</p>
                             {slot.location && <p className="mt-1 text-xs text-muted-foreground">{slot.location}</p>}
                           </div>
-                          <Button variant="ghost" size="icon" className="rounded-full" onClick={() => removeSlot(slot.id)}>
+                          <Button variant="ghost" size="icon" className="rounded-full" onClick={() => removeSlot(slot.id)} disabled={plannerLocked}>
                             <Trash2 className="h-4 w-4" />
                           </Button>
                         </div>

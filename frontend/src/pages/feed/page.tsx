@@ -94,6 +94,10 @@ export default function FeedPage() {
     );
   }, [feedMode, filters, hasRestoredState, searchQuery, selectedOrgId]);
 
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: "smooth" });
+  }, [feedMode]);
+
   const activeOrganizationIds = useMemo(() => {
     if (hasSearchQuery) {
       return [];
@@ -209,6 +213,14 @@ export default function FeedPage() {
   useEffect(() => {
     let cancelled = false;
     const fetchEvents = async () => {
+      if (isSubscribedSelected && isAuthenticated && activeOrganizationIds.length === 0) {
+        setEvents([]);
+        setCanLoadMore(false);
+        setPage(1);
+        setIsLoading(false);
+        return;
+      }
+
       setIsLoading(true);
       try {
         const data = await eventsAPI.getFeed(1, 10, undefined, {
@@ -239,7 +251,7 @@ export default function FeedPage() {
     return () => {
       cancelled = true;
     };
-  }, [activeOrganizationIds, deferredSearchQuery, filters.audience, filters.dateRange, filters.eventMode, hasSearchQuery]);
+  }, [activeOrganizationIds, deferredSearchQuery, filters.audience, filters.dateRange, filters.eventMode, hasSearchQuery, isAuthenticated, isSubscribedSelected]);
 
   const allKnownEvents = useMemo(() => {
     const merged = [...events, ...upcomingEvents, ...recommendedEvents];
@@ -269,6 +281,7 @@ export default function FeedPage() {
 
   const handleLoadMore = useCallback(async () => {
     if (isLoading) return;
+    if (isSubscribedSelected && isAuthenticated && activeOrganizationIds.length === 0) return;
     try {
       setIsLoading(true);
       const nextPage = page + 1;
@@ -289,7 +302,7 @@ export default function FeedPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [activeOrganizationIds, deferredSearchQuery, filters.audience, filters.dateRange, filters.eventMode, hasSearchQuery, isLoading, page]);
+  }, [activeOrganizationIds, deferredSearchQuery, filters.audience, filters.dateRange, filters.eventMode, hasSearchQuery, isAuthenticated, isLoading, isSubscribedSelected, page]);
 
   const activeFilterCount = useMemo(
     () =>
@@ -312,12 +325,34 @@ export default function FeedPage() {
         }
         return prev.filter((item) => item._id !== organizationId);
       });
+
+      if (!subscribed) {
+        setEvents((prev) =>
+          prev.filter(
+            (event) => String(event.organizationId?._id || event.organizationId || "") !== String(organizationId),
+          ),
+        );
+        setUpcomingEvents((prev) =>
+          prev.filter(
+            (event) => String(event.organizationId?._id || event.organizationId || "") !== String(organizationId),
+          ),
+        );
+        setRecommendedEvents((prev) =>
+          prev.filter(
+            (event) => String(event.organizationId?._id || event.organizationId || "") !== String(organizationId),
+          ),
+        );
+      }
     },
     [organizations]
   );
 
   const displayedEvents = useMemo(() => {
-    const baseEvents = [...events];
+    const baseEvents = isSubscribedSelected
+      ? events.filter((event) =>
+          subscribedOrgIds.includes(String(event.organizationId?._id || event.organizationId || "")),
+        )
+      : [...events];
     if (isUpcomingSelected) {
       return baseEvents
         .filter((event) => new Date(event.dateTime).getTime() >= Date.now())
@@ -331,7 +366,7 @@ export default function FeedPage() {
       });
     }
     return baseEvents;
-  }, [events, isTrendingSelected, isUpcomingSelected]);
+  }, [events, isSubscribedSelected, isTrendingSelected, isUpcomingSelected, subscribedOrgIds]);
 
   const trendingEvents = useMemo(
     () =>

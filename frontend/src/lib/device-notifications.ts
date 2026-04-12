@@ -71,8 +71,6 @@ async function showWithServiceWorker(payload: DeviceNotificationPayload) {
       body: payload.body,
       tag: payload.tag || payload.id,
       data: { url: payload.url || "/feed" },
-      icon: "/vite.svg",
-      badge: "/vite.svg",
     });
     return true;
   } catch (error) {
@@ -86,7 +84,6 @@ async function showForegroundNotification(payload: DeviceNotificationPayload) {
     const notification = new Notification(payload.title, {
       body: payload.body,
       tag: payload.tag || payload.id,
-      icon: "/vite.svg",
       data: { url: payload.url || "/feed" },
     });
     notification.onclick = () => {

@@ -1,5 +1,6 @@
 import { BrowserRouter, Route, Routes, useLocation } from "react-router-dom";
 import { AnimatePresence, motion } from "motion/react";
+import { useEffect } from "react";
 import { DefaultProviders } from "./components/providers/default.tsx";
 import AuthCallback from "./pages/auth/Callback.tsx";
 import EmailVerification from "./pages/auth/EmailVerification.tsx";
@@ -19,6 +20,10 @@ function AppRoutes() {
   const location = useLocation();
   const hideMobileNav =
     location.pathname === "/" || location.pathname.startsWith("/auth");
+
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: "smooth" });
+  }, [location.pathname, location.search]);
 
   return (
     <div className="relative isolate">

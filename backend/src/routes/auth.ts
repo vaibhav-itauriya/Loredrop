@@ -8,6 +8,63 @@ import mongoose from 'mongoose';
 
 const router: Router = Router();
 
+type AcademicTimetableSlotInput = {
+  id?: string;
+  title?: string;
+  day?: number;
+  startTime?: string;
+  endTime?: string;
+  location?: string;
+};
+
+function isValidTimeString(value: string) {
+  return /^\d{2}:\d{2}$/.test(value);
+}
+
+function normalizeAcademicTimetableSlots(input: unknown) {
+  if (!Array.isArray(input)) {
+    return { error: 'Academic timetable must be an array' as const };
+  }
+
+  const slots = input as AcademicTimetableSlotInput[];
+  if (slots.length > 500) {
+    return { error: 'Academic timetable is too large' as const };
+  }
+
+  const normalized = slots.map((slot, index) => {
+    const title = typeof slot?.title === 'string' ? slot.title.trim() : '';
+    const location = typeof slot?.location === 'string' ? slot.location.trim() : '';
+    const day = typeof slot?.day === 'number' ? slot.day : Number(slot?.day);
+    const startTime = typeof slot?.startTime === 'string' ? slot.startTime.trim() : '';
+    const endTime = typeof slot?.endTime === 'string' ? slot.endTime.trim() : '';
+    const id = typeof slot?.id === 'string' && slot.id.trim() ? slot.id.trim() : `${Date.now()}-${index}`;
+
+    if (!title) {
+      throw new Error(`Slot ${index + 1}: title is required`);
+    }
+    if (!Number.isInteger(day) || day < 0 || day > 6) {
+      throw new Error(`Slot ${index + 1}: day must be between 0 and 6`);
+    }
+    if (!isValidTimeString(startTime) || !isValidTimeString(endTime)) {
+      throw new Error(`Slot ${index + 1}: start and end times must use HH:MM format`);
+    }
+    if (endTime <= startTime) {
+      throw new Error(`Slot ${index + 1}: end time must be after start time`);
+    }
+
+    return {
+      id,
+      title,
+      day,
+      startTime,
+      endTime,
+      location: location || undefined,
+    };
+  });
+
+  return { slots: normalized };
+}
+
 function deriveBadges(profile: {
   isAlumni?: boolean;
   role?: string;
@@ -324,6 +381,7 @@ router.get('/me', authMiddleware, async (req: Request, res: Response) => {
       isAlumni: !!user.isAlumni,
       points,
       badges,
+      academicTimetable: Array.isArray(user.academicTimetable) ? user.academicTimetable : [],
       fcmTokenCount: Array.isArray(user.fcmTokens) ? user.fcmTokens.length : 0,
       isMainAdmin: !!isMainAdmin,
       createdAt: user.createdAt,
@@ -338,6 +396,51 @@ router.get('/me', authMiddleware, async (req: Request, res: Response) => {
   } catch (error) {
     console.error('Error fetching user:', error);
     res.status(500).json({ error: 'Failed to fetch user' });
+  }
+});
+
+router.get('/academic-timetable', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const user = await User.findById(req.userId).select('academicTimetable');
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    res.json({
+      slots: Array.isArray(user.academicTimetable) ? user.academicTimetable : [],
+    });
+  } catch (error) {
+    console.error('Error fetching academic timetable:', error);
+    res.status(500).json({ error: 'Failed to fetch academic timetable' });
+  }
+});
+
+router.put('/academic-timetable', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const normalized = normalizeAcademicTimetableSlots(req.body?.slots);
+    if ('error' in normalized) {
+      return res.status(400).json({ error: normalized.error });
+    }
+
+    const user = await User.findById(req.userId);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    user.academicTimetable = normalized.slots;
+    await user.save();
+
+    res.json({
+      success: true,
+      slots: user.academicTimetable || [],
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to update academic timetable';
+    const status = error instanceof Error && /^Slot \d+:/.test(error.message) ? 400 : 500;
+    if (status === 500) {
+      console.error('Error updating academic timetable:', error);
+    }
+    res.status(status).json({ error: message });
   }
 });
 

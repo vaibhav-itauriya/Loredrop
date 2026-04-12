@@ -15,6 +15,14 @@ export interface IUser extends Document {
   points?: number;
   badges?: string[];
   fcmTokens?: string[];
+  academicTimetable?: {
+    id: string;
+    title: string;
+    day: number;
+    startTime: string;
+    endTime: string;
+    location?: string;
+  }[];
   organizationId?: mongoose.Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
@@ -209,6 +217,20 @@ const UserSchema = new Schema<IUser>(
     points: { type: Number, default: 0 },
     badges: { type: [String], default: [] },
     fcmTokens: { type: [String], default: [] },
+    academicTimetable: {
+      type: [
+        {
+          _id: false,
+          id: { type: String, required: true },
+          title: { type: String, required: true },
+          day: { type: Number, required: true, min: 0, max: 6 },
+          startTime: { type: String, required: true },
+          endTime: { type: String, required: true },
+          location: String,
+        },
+      ],
+      default: [],
+    },
     organizationId: { type: Schema.Types.ObjectId, ref: 'Organization' },
   },
   { timestamps: true }
