@@ -57,48 +57,73 @@ export default function Hero() {
       />
 
       <div className="relative z-10 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20 pb-0">
-        <div className="text-center">
-          {/* Headline */}
-          <motion.h1
-            initial={{ y: 20, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            transition={{ delay: 0.1 }}
-            className="text-5xl sm:text-6xl lg:text-7xl font-semibold tracking-tight text-balance mb-6"
-          >
-            Never Miss a
-            <span className="block bg-gradient-to-r from-primary via-primary/80 to-accent bg-clip-text text-transparent">
-              Campus Moment
-            </span>
-          </motion.h1>
-
-          {/* Subheadline */}
-          <motion.p
-            initial={{ y: 20, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            transition={{ delay: 0.2 }}
-            className="text-xl text-muted-foreground/80 max-w-2xl mx-auto mb-10 text-balance font-medium"
-          >
-            Discover events from councils, clubs, and organizations.
-            Engage with your campus community like never before.
-          </motion.p>
-
-          {/* CTA Buttons */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-center">
+          {/* Left Column: Image */}
           <motion.div
-            initial={{ y: 20, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            transition={{ delay: 0.3 }}
-            className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-20"
+            initial={{ opacity: 0, x: -30 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: 0.2, duration: 0.8 }}
+            className="hidden lg:block relative lg:col-span-5"
           >
-            <Button size="lg" className="gap-2 bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 shadow-xl shadow-primary/20 rounded-full" asChild>
-              <Link to="/feed">
-                Explore Events
-                <ArrowRight className="w-4 h-4" />
-              </Link>
-            </Button>
-            <Button size="lg" variant="secondary" className="gap-2 rounded-full" asChild>
-              <a href="#features">Learn More</a>
-            </Button>
+            {/* Ambient Background Glow */}
+            <div className="absolute inset-0 bg-primary/10 blur-[120px] rounded-full pointer-events-none" />
+            
+            <div className="relative">
+              {/* Left Edge Blend Gradient */}
+              <div className="absolute inset-y-[10%] -left-[55%] w-64 bg-gradient-to-r from-background via-background/90 to-transparent z-10 pointer-events-none hidden xl:block" />
+              
+              <img 
+                src="/assets/IITK.jpg" 
+                alt="IIT Kanpur Campus" 
+                className="relative w-[210%] max-w-none h-auto -left-[60%] transition-transform duration-700 drop-shadow-[0_35px_45px_rgba(0,0,0,0.8)] z-0"
+              />
+            </div>
           </motion.div>
+
+          {/* Right Column: Hero Text */}
+          <div className="relative z-20 text-center lg:text-left lg:col-span-7 lg:pl-20">
+            {/* Headline */}
+            <motion.h1
+              initial={{ y: 20, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              transition={{ delay: 0.1 }}
+              className="text-5xl sm:text-6xl lg:text-7xl font-semibold tracking-tight text-balance mb-6"
+            >
+              Never Miss a
+              <span className="block bg-gradient-to-r from-primary via-primary/80 to-accent bg-clip-text text-transparent">
+                Campus Moment
+              </span>
+            </motion.h1>
+
+            {/* Subheadline */}
+            <motion.p
+              initial={{ y: 20, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              transition={{ delay: 0.2 }}
+              className="text-xl text-muted-foreground/80 max-w-2xl mx-auto lg:mx-0 mb-10 text-balance font-medium"
+            >
+              Discover events from councils, clubs, and organizations.
+              Engage with your campus community like never before.
+            </motion.p>
+
+            {/* CTA Buttons */}
+            <motion.div
+              initial={{ y: 20, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              transition={{ delay: 0.3 }}
+              className="flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-4 mb-10 lg:mb-0"
+            >
+              <Button size="lg" className="gap-2 bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 shadow-xl shadow-primary/20 rounded-full" asChild>
+                <Link to="/feed">
+                  Explore Events
+                  <ArrowRight className="w-4 h-4" />
+                </Link>
+              </Button>
+              <Button size="lg" variant="secondary" className="gap-2 rounded-full" asChild>
+                <a href="#features">Learn More</a>
+              </Button>
+            </motion.div>
+          </div>
         </div>
 
         {/* Stripe-Style Stats Section */}

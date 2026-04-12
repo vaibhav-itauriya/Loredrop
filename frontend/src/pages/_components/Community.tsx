@@ -41,30 +41,29 @@ export default function Community() {
           </motion.p>
         </div>
 
-        {/* Organizations Marquee */}
-        <div className="relative">
-          <div className="absolute left-0 top-0 bottom-0 w-32 bg-gradient-to-r from-background to-transparent z-10" />
-          <div className="absolute right-0 top-0 bottom-0 w-32 bg-gradient-to-l from-background to-transparent z-10" />
-          
-          <motion.div
-            className="flex gap-4 py-4"
-            animate={{ x: [0, -1000] }}
-            transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
-          >
-            {[...organizations, ...organizations].map((org, index) => (
-              <div
-                key={`${org.name}-${index}`}
-                className="flex-shrink-0 px-6 py-4 rounded-xl bg-card border border-border/50 hover:border-primary/30 transition-colors"
-              >
+      </div>
+
+      {/* Organizations Marquee - Full Screen Width */}
+      <div className="relative z-10 w-full overflow-hidden [mask-image:linear-gradient(to_right,transparent,black_5%,black_95%,transparent)]">
+        <motion.div
+          className="flex w-max py-4"
+          animate={{ x: ["0%", "-50%"] }}
+          transition={{ duration: 40, repeat: Infinity, ease: "linear" }}
+        >
+          {[...organizations, ...organizations, ...organizations, ...organizations].map((org, index) => (
+            <div key={`${org.name}-${index}`} className="pr-4">
+              <div className="flex-shrink-0 px-6 py-4 rounded-xl bg-card border border-border/50 hover:border-primary/30 transition-colors cursor-default">
                 <p className="font-semibold whitespace-nowrap" style={{ fontFamily: "var(--font-display)" }}>
                   {org.name}
                 </p>
                 <p className="text-sm text-muted-foreground">{org.type}</p>
               </div>
-            ))}
-          </motion.div>
-        </div>
+            </div>
+          ))}
+        </motion.div>
+      </div>
 
+      <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Image Grid */}
         <motion.div
           initial={{ opacity: 0, y: 40 }}

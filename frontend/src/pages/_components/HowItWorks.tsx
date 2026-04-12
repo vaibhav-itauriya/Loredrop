@@ -66,24 +66,42 @@ export default function HowItWorks() {
                 <div className="hidden lg:block absolute top-16 left-[60%] w-full h-0.5 bg-gradient-to-r from-primary/50 to-transparent" />
               )}
 
-              <div className="relative bg-card rounded-2xl p-8 border border-border/50 hover:border-primary/30 transition-all duration-300">
-                {/* Step Number */}
-                <div className="absolute -top-4 -left-4 w-12 h-12 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center shadow-lg shadow-primary/20">
-                  <span className="text-lg font-bold text-white" style={{ fontFamily: "var(--font-display)" }}>
-                    {step.step}
-                  </span>
+              <div className="relative group">
+                {/* Background Window Layer with Overflow Hidden */}
+                <div className="absolute inset-0 rounded-2xl border border-border/50 group-hover:border-primary/40 transition-all duration-300 group-hover:shadow-xl group-hover:shadow-primary/5 overflow-hidden">
+                  <div 
+                    className="absolute inset-0 z-0 opacity-70 transition-all duration-500 group-hover:opacity-50" 
+                    style={{ 
+                      backgroundImage: "url('/assets/student-campus-life.jpg')",
+                      backgroundAttachment: "fixed",
+                      backgroundSize: "min(100vw, 1280px) auto",
+                      backgroundPosition: "center",
+                      backgroundRepeat: "no-repeat"
+                    }}
+                  />
+                  <div className="absolute inset-0 z-0 bg-black/50 transition-colors duration-500 group-hover:bg-black/70" />
                 </div>
 
-                <div className="pt-4">
-                  <div className="w-14 h-14 rounded-2xl bg-muted flex items-center justify-center mb-6">
-                    <step.icon className="w-7 h-7 text-primary" />
+                {/* Content Layer */}
+                <div className="relative z-10 p-8 rounded-2xl border border-transparent">
+                  {/* Step Number Badge */}
+                  <div className="absolute -top-4 -left-4 w-12 h-12 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center shadow-lg shadow-primary/20 z-20">
+                    <span className="text-lg font-bold text-white" style={{ fontFamily: "var(--font-display)" }}>
+                      {step.step}
+                    </span>
                   </div>
-                  <h3 className="text-xl font-semibold mb-3" style={{ fontFamily: "var(--font-display)" }}>
-                    {step.title}
-                  </h3>
-                  <p className="text-muted-foreground leading-relaxed">
-                    {step.description}
-                  </p>
+
+                  <div className="pt-4">
+                    <div className="w-14 h-14 rounded-2xl bg-white shadow-md flex items-center justify-center mb-6">
+                      <step.icon className="w-7 h-7 text-black" />
+                    </div>
+                    <h3 className="text-xl font-semibold mb-3 text-white group-hover:text-primary transition-colors drop-shadow-sm" style={{ fontFamily: "var(--font-display)" }}>
+                      {step.title}
+                    </h3>
+                    <p className="text-white/90 leading-relaxed font-medium drop-shadow-sm">
+                      {step.description}
+                    </p>
+                  </div>
                 </div>
               </div>
             </motion.div>

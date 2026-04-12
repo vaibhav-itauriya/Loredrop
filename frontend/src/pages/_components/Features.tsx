@@ -104,26 +104,27 @@ export default function Features() {
             >
               {/* Fixed Background Image - Spans across all panes */}
               <div 
-                className="absolute inset-0 z-0 opacity-30 mix-blend-luminosity transition-opacity duration-500 group-hover:opacity-50" 
+                className="absolute inset-0 z-0 opacity-70 transition-all duration-500 group-hover:opacity-50" 
                 style={{ 
                   backgroundImage: "url('/assets/student-campus-life.jpg')",
                   backgroundAttachment: "fixed",
-                  backgroundSize: "cover",
-                  backgroundPosition: "center"
+                  backgroundSize: "min(100vw, 1280px) auto",
+                  backgroundPosition: "center",
+                  backgroundRepeat: "no-repeat"
                 }}
               />
               
-              {/* Overlay to ensure text readability */}
-              <div className="absolute inset-0 z-0 bg-background/80" />
+              {/* Dark Overlay to ensure text readability */}
+              <div className="absolute inset-0 z-0 bg-black/50 transition-colors duration-500 group-hover:bg-black/70" />
 
               <div className="relative z-10 p-6">
-                <div className={`inline-flex p-3 rounded-xl bg-gradient-to-br ${feature.color} mb-4 shadow-sm`}>
-                  <feature.icon className="w-6 h-6 text-white" />
+                <div className="inline-flex p-3 rounded-xl bg-white mb-4 shadow-md">
+                  <feature.icon className="w-6 h-6 text-black" />
                 </div>
-                <h3 className="text-lg font-semibold mb-2 text-foreground group-hover:text-primary transition-colors" style={{ fontFamily: "var(--font-display)" }}>
+                <h3 className="text-lg font-semibold mb-2 text-white group-hover:text-primary transition-colors drop-shadow-sm" style={{ fontFamily: "var(--font-display)" }}>
                   {feature.title}
                 </h3>
-                <p className="text-sm text-muted-foreground/90 leading-relaxed font-medium">
+                <p className="text-sm text-white/90 leading-relaxed font-medium drop-shadow-sm">
                   {feature.description}
                 </p>
               </div>
