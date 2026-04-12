@@ -17,16 +17,29 @@ import {
   Plus,
   Trash2,
 } from "lucide-react";
-import { eventsAPI } from "@/lib/api";
+import { interactionsAPI } from "@/lib/api";
 import { Calendar } from "@/components/ui/calendar.tsx";
 import { Badge } from "@/components/ui/badge.tsx";
 import { Card } from "@/components/ui/card.tsx";
 import { Skeleton } from "@/components/ui/skeleton.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import { Input } from "@/components/ui/input.tsx";
+import { useAuth } from "@/hooks/use-auth.ts";
 import { toast } from "sonner";
 
-type CampusEvent = {
+type SavedCalendarItem = {
+  _id: string;
+  eventId: {
+    _id: string;
+    title: string;
+    venue?: string;
+    dateTime: string;
+    endDateTime?: string;
+    organizationId?: { name?: string } | string;
+  } | null;
+};
+
+type SavedEvent = {
   _id: string;
   title: string;
   venue?: string;
@@ -34,6 +47,10 @@ type CampusEvent = {
   endDateTime?: string;
   organizationId?: { name?: string } | string;
 };
+
+function isSavedEvent(event: SavedEvent | null): event is SavedEvent {
+  return event !== null;
+}
 
 type TimetableSlot = {
   id: string;
@@ -60,8 +77,9 @@ function overlaps(startA: number, endA: number, startB: number, endB: number) {
 }
 
 export default function PersonalCalendarCard() {
+  const { isAuthenticated } = useAuth();
   const currentYear = new Date().getFullYear();
-  const [events, setEvents] = useState<CampusEvent[]>([]);
+  const [events, setEvents] = useState<SavedEvent[]>([]);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
   const [searchText, setSearchText] = useState("");
   const [upcomingOnly, setUpcomingOnly] = useState(true);
@@ -89,37 +107,53 @@ export default function PersonalCalendarCard() {
   }, [slots]);
 
   useEffect(() => {
-    const fetchCampusEvents = async () => {
+    const fetchSavedEvents = async (showError = true) => {
+      if (!isAuthenticated) {
+        setEvents([]);
+        setLoading(false);
+        return;
+      }
+
       try {
         setLoading(true);
-        const collected: CampusEvent[] = [];
-        const maxPages = 5;
-        let page = 1;
-        let totalPages = 1;
+        const data = await interactionsAPI.getCalendarSaves();
+        const normalized = (Array.isArray(data) ? data : [])
+          .map((item: SavedCalendarItem): SavedEvent | null => {
+            const event = item?.eventId;
+            if (!event?._id || !event?.dateTime) return null;
+            return {
+              _id: String(event._id),
+              title: event.title || "Untitled Event",
+              venue: event.venue,
+              dateTime: event.dateTime,
+              endDateTime: event.endDateTime,
+              organizationId: event.organizationId,
+            };
+          })
+          .filter(isSavedEvent);
 
-        do {
-          const data = await eventsAPI.getFeed(page, 50);
-          const batch = Array.isArray(data?.data) ? data.data : [];
-          collected.push(...batch);
-          totalPages = Math.min(Number(data?.pages || 1), maxPages);
-          page += 1;
-        } while (page <= totalPages);
-
-        const deduped = Array.from(new Map(collected.map((event) => [event._id, event])).values())
+        const deduped = Array.from(new Map(normalized.map((event) => [event._id, event])).values())
           .filter((event) => event?.dateTime)
           .sort((a, b) => new Date(a.dateTime).getTime() - new Date(b.dateTime).getTime());
 
         setEvents(deduped);
       } catch (error) {
-        console.error("Failed to load campus calendar:", error);
-        toast.error("Failed to load IITK events calendar");
+        console.error("Failed to load saved calendar events:", error);
+        if (showError) toast.error("Failed to load saved calendar events");
       } finally {
         setLoading(false);
       }
     };
 
-    fetchCampusEvents();
-  }, []);
+    fetchSavedEvents();
+
+    const handleCalendarSaveUpdate = () => {
+      fetchSavedEvents(false);
+    };
+
+    window.addEventListener("calendar-save-updated", handleCalendarSaveUpdate);
+    return () => window.removeEventListener("calendar-save-updated", handleCalendarSaveUpdate);
+  }, [isAuthenticated]);
 
   const scopedEvents = useMemo(() => {
     const now = new Date();
@@ -211,7 +245,7 @@ export default function PersonalCalendarCard() {
     });
   }, [selectedDateAllEvents, selectedDaySlots]);
 
-  const getOrganizationName = (event: CampusEvent) => {
+  const getOrganizationName = (event: SavedEvent) => {
     if (!event.organizationId) return "IIT Kanpur";
     if (typeof event.organizationId === "string") return "IIT Kanpur";
     return event.organizationId.name || "IIT Kanpur";
@@ -243,7 +277,7 @@ export default function PersonalCalendarCard() {
               Academic Planner
             </p>
             <p className="mt-1 text-xs text-muted-foreground">
-              Month view plus weekly timetable
+              Saved events plus weekly timetable
             </p>
           </div>
           {next48HoursCount > 0 && (
@@ -305,19 +339,19 @@ export default function PersonalCalendarCard() {
                 {selectedDate ? format(selectedDate, "EEE, MMM d") : "Select a date"}
               </p>
               <Badge variant="outline" className="text-xs">
-                {selectedDateAllEvents.length} events
+                {selectedDateAllEvents.length} saved
               </Badge>
             </div>
             <Input
               value={searchText}
               onChange={(e) => setSearchText(e.target.value)}
-              placeholder="Search selected date events..."
+              placeholder="Search saved events..."
               className="mb-3 h-9 text-xs"
             />
             <div className="max-h-56 space-y-2 overflow-auto pr-1 no-scrollbar">
               {selectedDateEvents.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
-                  No campus events for this day.
+                  No saved events for this day.
                 </p>
               ) : (
                 selectedDateEvents.map((event) => (

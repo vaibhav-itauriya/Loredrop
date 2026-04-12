@@ -30,6 +30,34 @@ async function notifyEligibleUsersOnPublish(event: any) {
 
 const router: Router = Router();
 
+async function buildActualCommentCountMap(eventIds: Array<mongoose.Types.ObjectId | string>) {
+  const normalizedIds = eventIds
+    .map((id) => String(id))
+    .filter(Boolean)
+    .map((id) => new mongoose.Types.ObjectId(id));
+
+  if (normalizedIds.length === 0) {
+    return new Map<string, number>();
+  }
+
+  const groupedCounts = await EventComment.aggregate([
+    { $match: { eventId: { $in: normalizedIds } } },
+    { $group: { _id: '$eventId', count: { $sum: 1 } } },
+  ]);
+
+  return new Map<string, number>(
+    groupedCounts.map((item) => [String(item._id), Number(item.count) || 0]),
+  );
+}
+
+async function withActualCommentCounts<T extends { _id: any; commentCount?: number }>(events: T[]) {
+  const commentCountMap = await buildActualCommentCountMap(events.map((event) => event._id));
+  return events.map((event) => ({
+    ...event,
+    commentCount: commentCountMap.get(String(event._id)) ?? 0,
+  }));
+}
+
 function parseAudienceQuery(value: unknown) {
   if (!value || typeof value !== 'string') return [];
   return value
@@ -209,9 +237,13 @@ router.get('/feed', optionalAuthMiddleware, async (req: Request, res: Response) 
 
     const total = await Event.countDocuments(query);
 
+    const eventsWithActualCommentCounts = await withActualCommentCounts(
+      events.map((event) => event.toObject()),
+    );
+
     // Enrich with user interaction data
     const enrichedEvents = await Promise.all(
-      events.map(async (event) => {
+      eventsWithActualCommentCounts.map(async (event) => {
         let hasUpvoted = false;
         let hasCalendarSave = false;
         let rsvpStatus: 'none' | 'rsvp' | 'waitlist' | 'checked_in' = 'none';
@@ -234,7 +266,7 @@ router.get('/feed', optionalAuthMiddleware, async (req: Request, res: Response) 
         }
 
         return {
-          ...event.toObject(),
+          ...event,
           hasUpvoted: !!hasUpvoted,
           hasCalendarSave: !!hasCalendarSave,
           rsvpStatus,
@@ -263,7 +295,11 @@ router.get('/upcoming', async (req: Request, res: Response) => {
       .sort({ dateTime: 1 })
       .limit(limit);
 
-    res.json(events);
+    const eventsWithActualCommentCounts = await withActualCommentCounts(
+      events.map((event) => event.toObject()),
+    );
+
+    res.json(eventsWithActualCommentCounts);
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch upcoming events' });
   }
@@ -305,8 +341,8 @@ router.get('/recommended', authMiddleware, async (req: Request, res: Response) =
       .sort({ dateTime: 1 })
       .limit(40);
 
-    const ranked = candidates
-      .map((event) => ({
+    const ranked = (await withActualCommentCounts(
+      candidates.map((event) => ({
         ...event.toObject(),
         recommendationScore: scoreRecommendedEvent(event, {
           branch: user.branch,
@@ -315,7 +351,8 @@ router.get('/recommended', authMiddleware, async (req: Request, res: Response) =
           preferredTags,
           interactedEventIds,
         }),
-      }))
+      })),
+    ))
       .sort((a, b) => b.recommendationScore - a.recommendationScore)
       .slice(0, 8);
 
@@ -345,7 +382,8 @@ router.get('/calendar/range', optionalAuthMiddleware, async (req: Request, res: 
       .populate('authorId', 'displayName')
       .sort({ dateTime: 1 });
 
-    const withColor = events.map((event: any) => {
+    const withColor = (await withActualCommentCounts(
+      events.map((event: any) => {
       const orgId = String(event.organizationId?._id || '');
       const hash = orgId.split('').reduce((acc: number, ch: string) => acc + ch.charCodeAt(0), 0);
       const hue = hash % 360;
@@ -353,7 +391,8 @@ router.get('/calendar/range', optionalAuthMiddleware, async (req: Request, res: 
         ...event.toObject(),
         calendarColor: `hsl(${hue} 70% 45%)`,
       };
-    });
+    }),
+    ));
 
     res.json(withColor);
   } catch (error) {
@@ -410,8 +449,10 @@ router.get('/:eventId', optionalAuthMiddleware, async (req: Request, res: Respon
       rsvpStatus = (rsvp as any)?.status || 'none';
     }
 
+    const [eventWithActualCommentCount] = await withActualCommentCounts([event.toObject()]);
+
     res.json({
-      ...event.toObject(),
+      ...eventWithActualCommentCount,
       hasUpvoted: !!hasUpvoted,
       hasCalendarSave: !!hasCalendarSave,
       rsvpStatus,

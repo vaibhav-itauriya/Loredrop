@@ -607,8 +607,8 @@ export default function FeedPage() {
               </div>
               <div className="overflow-x-auto rounded-[1.75rem] border border-white/65 bg-[linear-gradient(135deg,rgba(255,255,255,0.94),rgba(248,250,252,0.88))] px-4 py-4 shadow-[0_18px_50px_rgba(15,23,42,0.08)] backdrop-blur-xl sm:overflow-visible dark:border-slate-700/70 dark:bg-[linear-gradient(135deg,rgba(15,23,42,0.9),rgba(30,41,59,0.88))] dark:shadow-[0_18px_50px_rgba(2,6,23,0.3)]">
                 <div className="flex flex-col gap-3">
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <label className="relative block w-full sm:max-w-md">
+                  <div className="w-full">
+                    <label className="relative block w-full">
                       <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                       <input
                         value={searchQuery}
@@ -627,9 +627,6 @@ export default function FeedPage() {
                         </button>
                       ) : null}
                     </label>
-                    <p className="text-xs text-muted-foreground">
-                      Search spans all feed posts by title, description, tags, venue, and organization name.
-                    </p>
                   </div>
                   {hasSearchQuery && matchedOrganizations.length > 0 && (
                     <div className="flex flex-wrap items-center gap-2">

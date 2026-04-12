@@ -185,7 +185,10 @@ function EventCard({
       try {
         const data = await interactionsAPI.getComments(localEvent._id);
         if (!cancelled) {
-          setComments(data);
+          const actualComments = Array.isArray(data) ? data : [];
+          setComments(actualComments);
+          setCommentCount(actualComments.length);
+          setLocalEvent((prev: any) => ({ ...prev, commentCount: actualComments.length }));
         }
       } catch (error) {
         if (!cancelled) {
@@ -354,9 +357,10 @@ function EventCard({
       await interactionsAPI.addComment(localEvent._id, commentText);
       setCommentText("");
       const data = await interactionsAPI.getComments(localEvent._id);
-      setComments(data);
-      setCommentCount((prev: number) => prev + 1);
-      setLocalEvent((prev: any) => ({ ...prev, commentCount: (prev.commentCount || 0) + 1 }));
+      const actualComments = Array.isArray(data) ? data : [];
+      setComments(actualComments);
+      setCommentCount(actualComments.length);
+      setLocalEvent((prev: any) => ({ ...prev, commentCount: actualComments.length }));
       toast.success("Comment added!");
     } catch (error) {
       console.error("Failed to add comment:", error);
@@ -856,7 +860,11 @@ function EventCard({
                     Conversation
                   </p>
                   <p className="mt-1 text-sm text-slate-900 dark:text-slate-100">
-                    {comments.length > 0 ? comments[0]?.text : "Be the first to drop a quick note on this event."}
+                    {comments.length > 0
+                      ? comments[0]?.text
+                      : commentCount > 0
+                        ? `${commentCount} comment${commentCount === 1 ? "" : "s"} on this event. Open to read the conversation.`
+                        : "Be the first to drop a quick note on this event."}
                   </p>
                 </div>
                 <div className="flex items-center gap-2 rounded-full border border-white/70 bg-white/90 px-3 py-1 text-sm text-slate-500 shadow-sm dark:border-slate-700 dark:bg-slate-800/90 dark:text-slate-300 dark:shadow-none">

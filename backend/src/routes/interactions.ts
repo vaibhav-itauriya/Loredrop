@@ -8,6 +8,26 @@ import crypto from 'crypto';
 
 const router: Router = Router();
 
+async function buildActualCommentCountMap(eventIds: Array<mongoose.Types.ObjectId | string>) {
+  const normalizedIds = eventIds
+    .map((id) => String(id))
+    .filter(Boolean)
+    .map((id) => new mongoose.Types.ObjectId(id));
+
+  if (normalizedIds.length === 0) {
+    return new Map<string, number>();
+  }
+
+  const groupedCounts = await EventComment.aggregate([
+    { $match: { eventId: { $in: normalizedIds } } },
+    { $group: { _id: '$eventId', count: { $sum: 1 } } },
+  ]);
+
+  return new Map<string, number>(
+    groupedCounts.map((item) => [String(item._id), Number(item.count) || 0]),
+  );
+}
+
 async function promoteWaitlistIfPossible(eventId: mongoose.Types.ObjectId) {
   const event = await Event.findById(eventId);
   if (!event) return null;
@@ -183,7 +203,29 @@ router.get('/calendar/saved/all', authMiddleware, async (req: Request, res: Resp
       })
       .sort({ savedAt: -1 });
 
-    res.json(saves);
+    const commentCountMap = await buildActualCommentCountMap(
+      saves
+        .map((save: any) => save?.eventId?._id)
+        .filter(Boolean),
+    );
+
+    const normalizedSaves = saves.map((save: any) => {
+      const event = save?.eventId;
+      if (!event?._id) return save;
+
+      const eventObject = typeof event.toObject === 'function' ? event.toObject() : event;
+      const saveObject = typeof save.toObject === 'function' ? save.toObject() : save;
+
+      return {
+        ...saveObject,
+        eventId: {
+          ...eventObject,
+          commentCount: commentCountMap.get(String(event._id)) ?? 0,
+        },
+      };
+    });
+
+    res.json(normalizedSaves);
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch calendar saves' });
   }
