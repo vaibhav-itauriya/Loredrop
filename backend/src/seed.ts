@@ -166,10 +166,20 @@ function slugifyLabel(value: string) {
     .replace(/^-+|-+$/g, '');
 }
 
+const IITK_EVENT_IMAGE_URLS = [
+  'https://www.iitk.ac.in/data/media/landing_pages/iitk-building-overlay%20%281%29_0.jpg',
+  'https://www.iitk.ac.in/data/media/landing_pages/generalfacilities.jpg',
+  'https://www.iitk.ac.in/data/media/others/map.jpg',
+  'https://www.iitk.ac.in/data/media/landing_pages/studentcorner.jpg',
+  'https://www.iitk.ac.in/data/media/others/pk-lekler-lab.jpg',
+  'https://www.iitk.ac.in/data/media/landing_pages/facility-staff_0.jpg',
+  'https://www.iitk.ac.in/data/media/landing_pages/incubation-space_0.jpg',
+];
+
 function buildMediaGallery(seed: string, count: number) {
   return Array.from({ length: count }, (_, index) => ({
     type: 'image' as const,
-    url: `https://picsum.photos/seed/loredrop-${seed}-${index + 1}/1400/900`,
+    url: IITK_EVENT_IMAGE_URLS[(seed.split('').reduce((acc, ch) => acc + ch.charCodeAt(0), 0) + index) % IITK_EVENT_IMAGE_URLS.length],
   }));
 }
 

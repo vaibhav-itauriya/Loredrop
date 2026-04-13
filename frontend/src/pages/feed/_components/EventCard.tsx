@@ -99,6 +99,29 @@ const audienceLabels: Record<string, string> = {
   all: "Everyone",
 };
 
+const IITK_EVENT_IMAGE_URLS = [
+  "https://www.iitk.ac.in/data/media/landing_pages/iitk-building-overlay%20%281%29_0.jpg",
+  "https://www.iitk.ac.in/data/media/landing_pages/generalfacilities.jpg",
+  "https://www.iitk.ac.in/data/media/others/map.jpg",
+  "https://www.iitk.ac.in/data/media/landing_pages/studentcorner.jpg",
+  "https://www.iitk.ac.in/data/media/others/pk-lekler-lab.jpg",
+  "https://www.iitk.ac.in/data/media/landing_pages/facility-staff_0.jpg",
+  "https://www.iitk.ac.in/data/media/landing_pages/incubation-space_0.jpg",
+];
+
+function getIitkEventImageUrl(seed: string) {
+  const hash = seed.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
+  return IITK_EVENT_IMAGE_URLS[hash % IITK_EVENT_IMAGE_URLS.length];
+}
+
+function normalizeEventMediaUrl(url: string, seed: string) {
+  if (!url) return url;
+  if (url.includes("picsum.photos")) {
+    return getIitkEventImageUrl(seed);
+  }
+  return url;
+}
+
 const YOUTUBE_URL_REGEX = /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/)([\w-]{11})(?:[&?][\w=&%-]*)*/g;
 
 function extractYouTubeLinks(text: string): { id: string; url: string }[] {
@@ -396,8 +419,10 @@ function EventCard({
     if (Array.isArray(localEvent.media) && localEvent.media.length > 0) {
       return localEvent.media.map((item: any, index: number) => ({
         kind: "media" as const,
-        url:
+        url: normalizeEventMediaUrl(
           item?.url || "",
+          `${localEvent._id || localEvent.title || "iitk"}-${index + 1}`,
+        ),
         alt: item?.alt || `${localEvent.title} media ${index + 1}`,
       }));
     }

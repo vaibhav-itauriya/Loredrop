@@ -151,6 +151,10 @@ const EVENT_AUDIENCE_OPTIONS = [
   { value: 'staff', label: 'Staff' },
 ] as const;
 
+const EVENT_AUDIENCE_SHORTCUTS = [
+  { value: 'ug-pg', label: 'Both (UG + PG)', audiences: ['ug', 'pg'] as Array<'ug' | 'pg'> },
+] as const;
+
 export default function AdminPage() {
   const { isAuthenticated } = useAuth();
   const [organizations, setOrganizations] = useState<Organization[]>([]);
@@ -724,6 +728,25 @@ export default function AdminPage() {
       };
     });
   };
+
+  const toggleAudienceShortcut = (audiences: Array<'ug' | 'pg' | 'phd' | 'faculty' | 'staff'>) => {
+    setEventForm((prev) => {
+      const current = prev.audience.filter((item) => item !== 'all');
+      const hasAllSelected = audiences.every((audience) => current.includes(audience));
+
+      const next = hasAllSelected
+        ? current.filter((audience) => !audiences.includes(audience))
+        : Array.from(new Set([...current, ...audiences]));
+
+      return {
+        ...prev,
+        audience: next.length > 0 ? next : ['all'],
+      };
+    });
+  };
+
+  const isAudienceShortcutActive = (audiences: Array<'ug' | 'pg' | 'phd' | 'faculty' | 'staff'>) =>
+    audiences.every((audience) => eventForm.audience.includes(audience));
 
   const handleTaskStatusChange = async (task: OrganizerTask, status: 'todo' | 'in_progress' | 'done') => {
     try {
@@ -1420,6 +1443,22 @@ export default function AdminPage() {
 
                     <div className="rounded-md border p-4 space-y-3">
                       <Label>Target Audience</Label>
+                      <p className="text-sm text-muted-foreground">
+                        Choose one or more audiences for this event, or leave it on Everyone.
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        {EVENT_AUDIENCE_SHORTCUTS.map((shortcut) => (
+                          <Button
+                            key={shortcut.value}
+                            type="button"
+                            size="sm"
+                            variant={isAudienceShortcutActive(shortcut.audiences) ? 'default' : 'outline'}
+                            onClick={() => toggleAudienceShortcut(shortcut.audiences)}
+                          >
+                            {shortcut.label}
+                          </Button>
+                        ))}
+                      </div>
                       <div className="flex flex-wrap gap-2">
                         {EVENT_AUDIENCE_OPTIONS.map((option) => (
                           <Button

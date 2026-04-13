@@ -10,7 +10,6 @@ import {
   Layers,
   PencilLine,
   Settings2,
-  ShieldCheck,
   Trash2,
 } from "lucide-react";
 import EventEditDialog from "@/components/EventEditDialog.tsx";
@@ -239,7 +238,7 @@ export default function OrganizationManagePage() {
     return (
       <div className="min-h-screen bg-background">
         <div className="mx-auto max-w-3xl px-4 py-10 sm:px-6">
-          <Card className="rounded-[2rem] border-white/50 bg-white/80 shadow-[0_28px_80px_rgba(15,23,42,0.08)] backdrop-blur">
+          <Card className="rounded-[2rem] border-border/60 bg-card/90 shadow-[0_28px_80px_rgba(15,23,42,0.08)] backdrop-blur dark:shadow-[0_28px_80px_rgba(2,6,23,0.3)]">
             <CardHeader>
               <CardTitle>Sign in required</CardTitle>
               <CardDescription>Sign in with your campus account to manage organization pages and events.</CardDescription>
@@ -260,7 +259,7 @@ export default function OrganizationManagePage() {
               Back to feed
             </Button>
           </Link>
-          <Card className="rounded-[2rem] border-white/50 bg-white/80 shadow-[0_28px_80px_rgba(15,23,42,0.08)] backdrop-blur">
+          <Card className="rounded-[2rem] border-border/60 bg-card/90 shadow-[0_28px_80px_rgba(15,23,42,0.08)] backdrop-blur dark:shadow-[0_28px_80px_rgba(2,6,23,0.3)]">
             <CardHeader>
               <CardTitle>Organization admin access required</CardTitle>
               <CardDescription>You need owner, admin, or moderator access to open organization management.</CardDescription>
@@ -272,20 +271,20 @@ export default function OrganizationManagePage() {
   }
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top,rgba(56,189,248,0.12),transparent_34%),linear-gradient(180deg,#f8fbff_0%,#f7f7fb_50%,#f5f7fb_100%)]">
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top,rgba(56,189,248,0.12),transparent_34%),linear-gradient(180deg,#f8fbff_0%,#f7f7fb_50%,#f5f7fb_100%)] dark:bg-[radial-gradient(circle_at_top,rgba(56,189,248,0.12),transparent_26%),linear-gradient(180deg,#020617_0%,#0f172a_42%,#111827_100%)]">
       <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
         <div className="mb-5 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
             <Link to="/feed">
-              <Button variant="ghost" className="mb-2 pl-0 text-slate-600">
+              <Button variant="ghost" className="mb-2 pl-0 text-muted-foreground hover:text-foreground">
                 <ArrowLeft className="mr-2 h-4 w-4" />
                 Back to feed
               </Button>
             </Link>
-            <h1 className="text-3xl font-semibold tracking-tight text-slate-950" style={{ fontFamily: "var(--font-display)" }}>
+            <h1 className="text-3xl font-semibold tracking-tight text-foreground" style={{ fontFamily: "var(--font-display)" }}>
               Manage Organization
             </h1>
-            <p className="mt-1 text-sm text-slate-600">
+            <p className="mt-1 text-sm text-muted-foreground">
               Update branding, keep the public page polished, and manage event posts without changing your current admin flow.
             </p>
           </div>
@@ -294,7 +293,7 @@ export default function OrganizationManagePage() {
               <select
                 value={selectedOrg.slug}
                 onChange={(e) => handleOrganizationSwitch(e.target.value)}
-                className="rounded-full border border-white/70 bg-white/90 px-4 py-2 text-sm shadow-sm"
+                className="rounded-full border border-border/70 bg-background/90 px-4 py-2 text-sm text-foreground shadow-sm"
               >
                 {organizations.map((org) => (
                   <option key={org._id} value={org.slug}>
@@ -322,7 +321,7 @@ export default function OrganizationManagePage() {
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.28, ease: "easeOut" }}
-          className="overflow-hidden rounded-[2rem] border border-white/60 bg-white/75 shadow-[0_30px_90px_rgba(15,23,42,0.08)] backdrop-blur-xl"
+          className="overflow-hidden rounded-[2rem] border border-border/60 bg-background/75 shadow-[0_30px_90px_rgba(15,23,42,0.08)] backdrop-blur-xl dark:shadow-[0_30px_90px_rgba(2,6,23,0.34)]"
         >
           <div
             className="relative min-h-[220px] overflow-hidden border-b border-white/50 bg-[linear-gradient(135deg,#0f3b57_0%,#1a7fa6_38%,#5a4b3e_100%)]"
@@ -376,7 +375,7 @@ export default function OrganizationManagePage() {
 
           <div className="p-5 sm:p-8">
             <Tabs defaultValue="identity" className="space-y-6">
-              <TabsList className="grid w-full grid-cols-3 rounded-full bg-slate-100/90 p-1">
+              <TabsList className="grid w-full grid-cols-3 rounded-full bg-muted/80 p-1">
                 <TabsTrigger value="identity" className="rounded-full">Identity</TabsTrigger>
                 <TabsTrigger value="branding" className="rounded-full">Banner & Logo</TabsTrigger>
                 <TabsTrigger value="events" className="rounded-full">Manage Events</TabsTrigger>
@@ -384,7 +383,7 @@ export default function OrganizationManagePage() {
 
               <TabsContent value="identity" className="space-y-6">
                 <div className="grid gap-6 xl:grid-cols-[1.35fr_0.8fr]">
-                  <Card className="rounded-[1.5rem] border-slate-200/70 bg-white/90 shadow-sm">
+                  <Card className="rounded-[1.5rem] border-border/70 bg-card/90 shadow-sm">
                     <CardHeader>
                       <CardTitle className="flex items-center gap-2">
                         <PencilLine className="h-5 w-5 text-sky-600" />
@@ -446,36 +445,12 @@ export default function OrganizationManagePage() {
                       </div>
                     </CardContent>
                   </Card>
-
-                  <Card className="rounded-[1.5rem] border-slate-200/70 bg-[linear-gradient(180deg,rgba(248,250,252,0.96),rgba(255,255,255,0.9))] shadow-sm">
-                    <CardHeader>
-                      <CardTitle className="flex items-center gap-2">
-                        <ShieldCheck className="h-5 w-5 text-emerald-600" />
-                        Recommended Admin Controls
-                      </CardTitle>
-                      <CardDescription>These are the core controls most organization admins expect on a public page manager.</CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-3 text-sm text-slate-600">
-                      <div className="rounded-2xl border border-slate-200/70 bg-white/80 p-4">
-                        <p className="font-medium text-slate-900">Brand consistency</p>
-                        <p className="mt-1">Keep logo, banner, slug, and description fresh so your page feels official and recognizable.</p>
-                      </div>
-                      <div className="rounded-2xl border border-slate-200/70 bg-white/80 p-4">
-                        <p className="font-medium text-slate-900">Post management</p>
-                        <p className="mt-1">Review older events, edit mistakes, and remove outdated posts that make the org feel inactive.</p>
-                      </div>
-                      <div className="rounded-2xl border border-slate-200/70 bg-white/80 p-4">
-                        <p className="font-medium text-slate-900">Fast navigation</p>
-                        <p className="mt-1">Jump to the public page for QA and to the admin dashboard when you need to create a new event.</p>
-                      </div>
-                    </CardContent>
-                  </Card>
                 </div>
               </TabsContent>
 
               <TabsContent value="branding" className="space-y-6">
                 <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
-                  <Card className="rounded-[1.5rem] border-slate-200/70 bg-white/90 shadow-sm">
+                  <Card className="rounded-[1.5rem] border-border/70 bg-card/90 shadow-sm">
                     <CardHeader>
                       <CardTitle className="flex items-center gap-2">
                         <ImagePlus className="h-5 w-5 text-fuchsia-600" />
@@ -510,7 +485,7 @@ export default function OrganizationManagePage() {
                     </CardContent>
                   </Card>
 
-                  <Card className="overflow-hidden rounded-[1.5rem] border-slate-200/70 bg-white/90 shadow-sm">
+                  <Card className="overflow-hidden rounded-[1.5rem] border-border/70 bg-card/90 shadow-sm">
                     <div
                       className="relative h-52 bg-[linear-gradient(135deg,#082f49_0%,#0f766e_40%,#7c2d12_100%)]"
                       style={orgForm.coverImage ? { backgroundImage: `url(${orgForm.coverImage})`, backgroundSize: "cover", backgroundPosition: "center" } : undefined}
@@ -519,16 +494,16 @@ export default function OrganizationManagePage() {
                     </div>
                     <CardContent className="relative -mt-12 p-6">
                       <div className="flex items-end gap-4">
-                        <div className="flex h-24 w-24 items-center justify-center overflow-hidden rounded-[1.5rem] border-4 border-white bg-slate-100 shadow-lg">
+                        <div className="flex h-24 w-24 items-center justify-center overflow-hidden rounded-[1.5rem] border-4 border-background bg-muted shadow-lg">
                           {orgForm.logo ? (
                             <img src={orgForm.logo} alt={orgForm.name} className="h-full w-full object-cover" />
                           ) : (
-                            <Building2 className="h-10 w-10 text-slate-400" />
+                            <Building2 className="h-10 w-10 text-muted-foreground" />
                           )}
                         </div>
                         <div className="pb-2">
-                          <p className="text-xl font-semibold text-slate-950">{orgForm.name || "Organization Name"}</p>
-                          <p className="text-sm text-slate-500">Live preview for the public organization header.</p>
+                          <p className="text-xl font-semibold text-foreground">{orgForm.name || "Organization Name"}</p>
+                          <p className="text-sm text-muted-foreground">Live preview for the public organization header.</p>
                         </div>
                       </div>
                     </CardContent>
@@ -537,7 +512,7 @@ export default function OrganizationManagePage() {
               </TabsContent>
 
               <TabsContent value="events" className="space-y-6">
-                <Card className="rounded-[1.5rem] border-slate-200/70 bg-white/90 shadow-sm">
+                <Card className="rounded-[1.5rem] border-border/70 bg-card/90 shadow-sm">
                   <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div>
                       <CardTitle className="flex items-center gap-2">
@@ -555,32 +530,32 @@ export default function OrganizationManagePage() {
                   </CardHeader>
                   <CardContent>
                     {events.length === 0 ? (
-                      <div className="rounded-[1.5rem] border border-dashed border-slate-200 bg-slate-50/90 p-8 text-center">
-                        <p className="font-medium text-slate-900">No events for this organization yet</p>
-                        <p className="mt-2 text-sm text-slate-500">Use the existing admin dashboard to create the first event, then manage edits here.</p>
+                      <div className="rounded-[1.5rem] border border-dashed border-border bg-muted/40 p-8 text-center">
+                        <p className="font-medium text-foreground">No events for this organization yet</p>
+                        <p className="mt-2 text-sm text-muted-foreground">Use the existing admin dashboard to create the first event, then manage edits here.</p>
                       </div>
                     ) : (
                       <div className="space-y-4">
                         {events.map((event) => (
                           <div
                             key={event._id}
-                            className="rounded-[1.5rem] border border-slate-200/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.92))] p-5 shadow-sm"
+                            className="rounded-[1.5rem] border border-border/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.92))] p-5 shadow-sm dark:bg-[linear-gradient(180deg,rgba(30,41,59,0.94),rgba(15,23,42,0.92))]"
                           >
                             <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                               <div className="min-w-0 flex-1">
                                 <div className="flex flex-wrap items-center gap-2">
-                                  <Badge variant="outline" className="rounded-full border-slate-200 bg-slate-50 text-slate-700">
+                                  <Badge variant="outline" className="rounded-full border-border/70 bg-muted/50 text-foreground">
                                     {event.mode || "offline"}
                                   </Badge>
                                   {Array.isArray(event.tags) && event.tags.slice(0, 3).map((tag: string) => (
-                                    <Badge key={tag} className="rounded-full bg-slate-900/[0.04] text-slate-700 shadow-none">
+                                    <Badge key={tag} className="rounded-full bg-muted text-muted-foreground shadow-none">
                                       {tag}
                                     </Badge>
                                   ))}
                                 </div>
-                                <h3 className="mt-3 text-xl font-semibold text-slate-950">{event.title}</h3>
-                                <p className="mt-2 line-clamp-2 text-sm text-slate-600">{event.description}</p>
-                                <div className="mt-4 flex flex-wrap gap-4 text-xs text-slate-500">
+                                <h3 className="mt-3 text-xl font-semibold text-foreground">{event.title}</h3>
+                                <p className="mt-2 line-clamp-2 text-sm text-muted-foreground">{event.description}</p>
+                                <div className="mt-4 flex flex-wrap gap-4 text-xs text-muted-foreground">
                                   <span>{new Date(event.dateTime).toLocaleString()}</span>
                                   <span>{event.venue || "Venue TBA"}</span>
                                   <span>{event.capacity ? `${event.capacity} capacity` : "Open capacity"}</span>

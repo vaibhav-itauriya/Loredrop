@@ -55,10 +55,11 @@ type SavedEvent = {
 };
 
 type VisibleCalendarEvent = {
-  _id?: string;
-  title?: string;
+  _id: string;
+  title: string;
   venue?: string;
-  dateTime?: string;
+  dateTime: string;
+  endDateTime?: string;
   organizationId?: { name?: string } | string;
 };
 

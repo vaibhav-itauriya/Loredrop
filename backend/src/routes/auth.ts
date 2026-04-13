@@ -422,13 +422,15 @@ router.put('/academic-timetable', authMiddleware, async (req: Request, res: Resp
       return res.status(400).json({ error: normalized.error });
     }
 
-    const user = await User.findById(req.userId);
+    const user = await User.findByIdAndUpdate(
+      req.userId,
+      { $set: { academicTimetable: normalized.slots } },
+      { new: true },
+    ).select('academicTimetable');
+
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
-
-    user.academicTimetable = normalized.slots;
-    await user.save();
 
     res.json({
       success: true,

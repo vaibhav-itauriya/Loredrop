@@ -24,36 +24,40 @@ export function sortAcademicTimetable(slots: AcademicTimetableSlot[]) {
   );
 }
 
+function isAcademicTimetableSlot(slot: AcademicTimetableSlot | null): slot is AcademicTimetableSlot {
+  return slot !== null;
+}
+
 export function normalizeAcademicTimetable(input: unknown): AcademicTimetableSlot[] {
   if (!Array.isArray(input)) return [];
 
-  return sortAcademicTimetable(
-    input
-      .map((slot, index) => {
-        if (!slot || typeof slot !== "object") return null;
-        const raw = slot as Partial<AcademicTimetableSlot>;
-        const title = typeof raw.title === "string" ? raw.title.trim() : "";
-        const location = typeof raw.location === "string" ? raw.location.trim() : "";
-        const day = typeof raw.day === "number" ? raw.day : Number(raw.day);
-        const startTime = typeof raw.startTime === "string" ? raw.startTime.trim() : "";
-        const endTime = typeof raw.endTime === "string" ? raw.endTime.trim() : "";
-        const id = typeof raw.id === "string" && raw.id.trim() ? raw.id.trim() : `slot-${index}`;
+  const normalizedSlots = input
+    .map((slot, index): AcademicTimetableSlot | null => {
+      if (!slot || typeof slot !== "object") return null;
+      const raw = slot as Partial<AcademicTimetableSlot>;
+      const title = typeof raw.title === "string" ? raw.title.trim() : "";
+      const location = typeof raw.location === "string" ? raw.location.trim() : "";
+      const day = typeof raw.day === "number" ? raw.day : Number(raw.day);
+      const startTime = typeof raw.startTime === "string" ? raw.startTime.trim() : "";
+      const endTime = typeof raw.endTime === "string" ? raw.endTime.trim() : "";
+      const id = typeof raw.id === "string" && raw.id.trim() ? raw.id.trim() : `slot-${index}`;
 
-        if (!title || !Number.isInteger(day) || day < 0 || day > 6) return null;
-        if (!isValidTimeString(startTime) || !isValidTimeString(endTime)) return null;
-        if (toMinutes(endTime) <= toMinutes(startTime)) return null;
+      if (!title || !Number.isInteger(day) || day < 0 || day > 6) return null;
+      if (!isValidTimeString(startTime) || !isValidTimeString(endTime)) return null;
+      if (toMinutes(endTime) <= toMinutes(startTime)) return null;
 
-        return {
-          id,
-          title,
-          day,
-          startTime,
-          endTime,
-          location: location || undefined,
-        };
-      })
-      .filter((slot): slot is AcademicTimetableSlot => slot !== null),
-  );
+      return {
+        id,
+        title,
+        day,
+        startTime,
+        endTime,
+        location: location || undefined,
+      };
+    })
+    .filter(isAcademicTimetableSlot);
+
+  return sortAcademicTimetable(normalizedSlots);
 }
 
 export function readLocalAcademicTimetable() {

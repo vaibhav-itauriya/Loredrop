@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { authAPI } from "@/lib/api";
 
 export function useAuth() {
   const [user, setUser] = useState<any>(null);
@@ -7,13 +8,21 @@ export function useAuth() {
   const [isConfigured] = useState(true);
 
   useEffect(() => {
-    const syncUserFromStorage = () => {
+    const syncUserFromStorage = async () => {
       try {
         const storedUser = localStorage.getItem("user");
         const storedToken = localStorage.getItem("authToken");
 
         if (storedUser && storedToken) {
-          setUser(JSON.parse(storedUser));
+          try {
+            const profile = await authAPI.getProfile();
+            setUser(profile);
+            localStorage.setItem("user", JSON.stringify(profile));
+          } catch (err: any) {
+            localStorage.removeItem("authToken");
+            localStorage.removeItem("user");
+            setUser(null);
+          }
           return;
         }
 
@@ -24,16 +33,20 @@ export function useAuth() {
     };
 
     try {
-      syncUserFromStorage();
+      void syncUserFromStorage();
     } finally {
       setIsLoading(false);
     }
 
-    window.addEventListener("storage", syncUserFromStorage);
-    window.addEventListener("auth-state-changed", syncUserFromStorage as EventListener);
+    const handleSync = () => {
+      void syncUserFromStorage();
+    };
+
+    window.addEventListener("storage", handleSync);
+    window.addEventListener("auth-state-changed", handleSync as EventListener);
     return () => {
-      window.removeEventListener("storage", syncUserFromStorage);
-      window.removeEventListener("auth-state-changed", syncUserFromStorage as EventListener);
+      window.removeEventListener("storage", handleSync);
+      window.removeEventListener("auth-state-changed", handleSync as EventListener);
     };
   }, []);
 
