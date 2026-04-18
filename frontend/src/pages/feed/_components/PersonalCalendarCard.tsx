@@ -4,7 +4,6 @@ import {
   endOfMonth,
   endOfWeek,
   format,
-  isAfter,
   isSameDay,
   isSameMonth,
   startOfMonth,
@@ -94,7 +93,6 @@ export default function PersonalCalendarCard() {
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
   const [monthCursor, setMonthCursor] = useState(new Date());
   const [searchText, setSearchText] = useState("");
-  const [upcomingOnly, setUpcomingOnly] = useState(true);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<"month" | "week">("month");
   const { slots, setSlots } = useAcademicTimetable();
@@ -189,19 +187,14 @@ export default function PersonalCalendarCard() {
     };
   }, [monthCursor]);
 
-  const scopedEvents = useMemo(() => {
-    const now = new Date();
-    if (!upcomingOnly) return events;
-    return events.filter((event) => isAfter(new Date(event.dateTime), now));
-  }, [events, upcomingOnly]);
+  const scopedEvents = events;
 
   const scopedVisibleEvents = useMemo(() => {
-    const monthEvents = visibleEvents.filter((event) => {
+    return visibleEvents.filter((event) => {
       if (!event?.dateTime) return false;
       return isSameMonth(new Date(event.dateTime), monthCursor);
     });
-    return monthEvents;
-  }, [visibleEvents, upcomingOnly, monthCursor]);
+  }, [visibleEvents, monthCursor]);
 
   const eventDates = useMemo(
     () => scopedEvents.map((event) => startOfDay(new Date(event.dateTime))),
@@ -373,9 +366,6 @@ export default function PersonalCalendarCard() {
           </Button>
           <Button type="button" variant="outline" size="sm" onClick={() => setSelectedDate(new Date())}>
             Today
-          </Button>
-          <Button type="button" variant={upcomingOnly ? "default" : "outline"} size="sm" onClick={() => setUpcomingOnly((prev) => !prev)}>
-            {upcomingOnly ? "Upcoming" : "All"}
           </Button>
         </div>
       </div>

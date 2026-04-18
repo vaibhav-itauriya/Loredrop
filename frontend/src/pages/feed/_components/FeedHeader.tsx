@@ -169,7 +169,7 @@ export default function FeedHeader({
               className="rounded-full px-4 shadow-sm"
               onClick={onSelectForYou}
             >
-              For You
+              Home
             </Button>
             <Button
               variant={isSubscribedActive ? "default" : "ghost"}
@@ -177,7 +177,7 @@ export default function FeedHeader({
               className="rounded-full px-4 shadow-sm"
               onClick={onSelectSubscribed}
             >
-              Subscribed
+              For You
             </Button>
             <Button
               variant={activeMode === "trending" ? "default" : "ghost"}

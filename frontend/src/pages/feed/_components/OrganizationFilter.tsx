@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button.tsx";
 import { Badge } from "@/components/ui/badge.tsx";
 import { cn } from "@/lib/utils.ts";
 import { groupOrganizations } from "@/lib/org-hierarchy.ts";
-import { Check, Compass, Flame, Layers3, Plus, Sparkles, Users2 } from "lucide-react";
+import { Building2, Check, Compass, Flame, Layers3, Plus, Sparkles, Users2 } from "lucide-react";
 
 type Organization = any;
 
@@ -44,7 +44,7 @@ export default function OrganizationFilter({
   subscribedOrganizations,
   onSelect,
 }: OrganizationFilterProps) {
-  const { councils, festivals, others } = groupOrganizations(organizations);
+  const { councils, festivals, departments, others } = groupOrganizations(organizations);
   const allClubs = organizations
     .filter((org) => org.type === "club")
     .sort((a, b) => a.name.localeCompare(b.name));
@@ -116,6 +116,7 @@ export default function OrganizationFilter({
             ))}
           </div>
         )}
+
       </div>
 
       {councils.length > 0 && (
@@ -190,6 +191,33 @@ export default function OrganizationFilter({
                 onClick={() => onSelect(org._id)}
               >
                 <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-muted to-muted/50">
+                  <OrgLogo org={org} />
+                </div>
+                <span className="truncate text-sm">{org.name}</span>
+              </Button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {departments.length > 0 && (
+        <div>
+          <h3 className="mb-3 flex items-center gap-2 px-2 text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+            <Building2 className="h-3.5 w-3.5" />
+            Departments
+          </h3>
+          <div className="space-y-1">
+            {departments.map((org) => (
+              <Button
+                key={org._id}
+                variant={selectedId === org._id ? "secondary" : "ghost"}
+                className={cn(
+                  "h-auto w-full justify-start gap-3 rounded-[1.15rem] border border-transparent px-3 py-3 transition-colors",
+                  selectedId === org._id ? "border-primary/20 bg-primary/10 text-foreground shadow-[0_10px_20px_rgba(99,102,241,0.08)]" : "hover:bg-white/75 dark:hover:bg-slate-900/65"
+                )}
+                onClick={() => onSelect(org._id)}
+              >
+                <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary/20 to-accent/20">
                   <OrgLogo org={org} />
                 </div>
                 <span className="truncate text-sm">{org.name}</span>

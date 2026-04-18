@@ -20,7 +20,8 @@ export function groupOrganizations(orgs: OrganizationLike[]) {
   const councils = orgs.filter((o) => o.type === "council").sort(byName);
   const festivals = orgs.filter((o) => o.type === "festival").sort(byName);
   const clubs = orgs.filter((o) => o.type === "club").sort(byName);
-  const others = orgs.filter((o) => !["council", "club", "festival"].includes(o.type || "")).sort(byName);
+  const departments = orgs.filter((o) => o.type === "department").sort(byName);
+  const others = orgs.filter((o) => !["council", "club", "festival", "department"].includes(o.type || "")).sort(byName);
 
   const councilIdSet = new Set(councils.map((c) => c._id));
   const clubsByCouncil = new Map<string, OrganizationLike[]>();
@@ -41,11 +42,11 @@ export function groupOrganizations(orgs: OrganizationLike[]) {
     clubsByCouncil.set(key, list.sort(byName));
   }
 
-  return { councils, festivals, others, clubsByCouncil, orphanClubs: orphanClubs.sort(byName) };
+  return { councils, festivals, departments, others, clubsByCouncil, orphanClubs: orphanClubs.sort(byName) };
 }
 
 export function buildOrganizationOptions(orgs: OrganizationLike[]) {
-  const { councils, festivals, others, clubsByCouncil, orphanClubs } = groupOrganizations(orgs);
+  const { councils, festivals, departments, others, clubsByCouncil, orphanClubs } = groupOrganizations(orgs);
   const options: { id: string; label: string; disabled?: boolean }[] = [];
 
   if (councils.length > 0) {
@@ -70,6 +71,13 @@ export function buildOrganizationOptions(orgs: OrganizationLike[]) {
     options.push({ id: "label-festivals", label: "Festivals", disabled: true });
     for (const festival of festivals) {
       options.push({ id: festival._id, label: festival.name });
+    }
+  }
+
+  if (departments.length > 0) {
+    options.push({ id: "label-departments", label: "Departments", disabled: true });
+    for (const department of departments) {
+      options.push({ id: department._id, label: department.name });
     }
   }
 
