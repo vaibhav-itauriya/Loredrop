@@ -403,6 +403,8 @@ EventRSVPSchema.index({ eventId: 1, userId: 1 }, { unique: true });
 EventRSVPSchema.index({ eventId: 1, status: 1, createdAt: 1 });
 EventSchema.index({ organizationId: 1, dateTime: 1, isPublished: 1 });
 EventSchema.index({ seriesId: 1, 'recurrence.occurrenceIndex': 1 });
+EventSchema.index({ isPublished: 1, createdAt: -1 });
+EventSchema.index({ isPublished: 1, dateTime: 1 });
 
 const AuditLogSchema = new Schema<IAuditLog>(
   {

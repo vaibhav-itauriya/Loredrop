@@ -228,51 +228,43 @@ router.get('/feed', optionalAuthMiddleware, async (req: Request, res: Response) 
       ];
     }
 
-    const events = await Event.find(query)
-      .populate('organizationId', 'name logo slug type description')
-      .populate('authorId', 'displayName avatar email')
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit);
+    const [events, total] = await Promise.all([
+      Event.find(query)
+        .populate('organizationId', 'name logo slug type description')
+        .populate('authorId', 'displayName avatar email')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      Event.countDocuments(query),
+    ]);
 
-    const total = await Event.countDocuments(query);
+    const eventsWithActualCommentCounts = await withActualCommentCounts(events as any[]);
 
-    const eventsWithActualCommentCounts = await withActualCommentCounts(
-      events.map((event) => event.toObject()),
-    );
+    const eventIds = eventsWithActualCommentCounts.map((event: any) => event._id);
+    const userObjectId = req.userId ? new mongoose.Types.ObjectId(req.userId) : null;
 
-    // Enrich with user interaction data
-    const enrichedEvents = await Promise.all(
-      eventsWithActualCommentCounts.map(async (event) => {
-        let hasUpvoted = false;
-        let hasCalendarSave = false;
-        let rsvpStatus: 'none' | 'rsvp' | 'waitlist' | 'checked_in' = 'none';
+    const [upvotedIds, savedIds, rsvpDocs] = userObjectId && eventIds.length > 0
+      ? await Promise.all([
+          EventUpvote.find({ eventId: { $in: eventIds }, userId: userObjectId }).select('eventId').lean(),
+          CalendarSave.find({ eventId: { $in: eventIds }, userId: userObjectId }).select('eventId').lean(),
+          EventRSVP.find({ eventId: { $in: eventIds }, userId: userObjectId }).select('eventId status').lean(),
+        ])
+      : [[], [], []];
 
-        if (req.userId) {
-          hasUpvoted = !!(await EventUpvote.exists({
-            eventId: event._id,
-            userId: new mongoose.Types.ObjectId(req.userId),
-          }));
+    const upvotedSet = new Set(upvotedIds.map((doc: any) => String(doc.eventId)));
+    const savedSet = new Set(savedIds.map((doc: any) => String(doc.eventId)));
+    const rsvpMap = new Map(rsvpDocs.map((doc: any) => [String(doc.eventId), doc.status]));
 
-          hasCalendarSave = !!(await CalendarSave.exists({
-            eventId: event._id,
-            userId: new mongoose.Types.ObjectId(req.userId),
-          }));
-          const rsvp = await EventRSVP.findOne({
-            eventId: event._id,
-            userId: new mongoose.Types.ObjectId(req.userId),
-          }).select('status');
-          rsvpStatus = (rsvp as any)?.status || 'none';
-        }
-
-        return {
-          ...event,
-          hasUpvoted: !!hasUpvoted,
-          hasCalendarSave: !!hasCalendarSave,
-          rsvpStatus,
-        };
-      })
-    );
+    const enrichedEvents = eventsWithActualCommentCounts.map((event: any) => {
+      const id = String(event._id);
+      return {
+        ...event,
+        hasUpvoted: upvotedSet.has(id),
+        hasCalendarSave: savedSet.has(id),
+        rsvpStatus: (rsvpMap.get(id) as 'none' | 'rsvp' | 'waitlist' | 'checked_in') || 'none',
+      };
+    });
 
     res.json({ data: enrichedEvents, total, page, pages: Math.ceil(total / limit) });
   } catch (error) {
