@@ -604,7 +604,12 @@ export default function AdminPage() {
       setActingOrgAdminId(membershipId);
       await organizationsAPI.removeOrganizationAdmin(membershipId);
       setSuccessMessage('Admin access removed.');
-      await fetchOrganizationAdmins();
+      setOrganizationAdmins((prev) =>
+        prev.map((org) => ({
+          ...org,
+          admins: org.admins.filter((admin) => admin.membershipId !== membershipId),
+        })),
+      );
       setTimeout(() => setSuccessMessage(null), 3000);
     } catch (err: any) {
       setError(err?.message || 'Failed to remove admin');
@@ -678,13 +683,33 @@ export default function AdminPage() {
     try {
       setAssigningOrgAdmin(true);
       setError(null);
-      await organizationsAPI.assignOrganizationAdmin({
+      const payload = {
         email: newOrgAdminForm.email.trim().toLowerCase(),
         organizationId: newOrgAdminForm.organizationId,
-      });
+      };
+      await organizationsAPI.assignOrganizationAdmin(payload);
       setSuccessMessage('Organization admin assigned successfully.');
+      setOrganizationAdmins((prev) =>
+        prev.map((org) =>
+          org.organizationId === payload.organizationId
+            ? {
+                ...org,
+                admins: [
+                  ...org.admins,
+                  {
+                    membershipId: `pending-${payload.email}`,
+                    userId: `pending-${payload.email}`,
+                    name: payload.email,
+                    email: payload.email,
+                    role: 'admin',
+                    joinedAt: new Date().toISOString(),
+                  },
+                ],
+              }
+            : org,
+        ),
+      );
       setNewOrgAdminForm({ email: '', organizationId: '' });
-      await fetchOrganizationAdmins();
       setTimeout(() => setSuccessMessage(null), 3000);
     } catch (err: any) {
       setError(err?.message || 'Failed to assign organization admin');
