@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { Organization, OrganizationMember, OrganizationSubscription, User, Event, CalendarSave, EventUpvote, EventComment, EventRSVP, AuditLog } from '../models';
+import { Organization, OrganizationMember, OrganizationSubscription, User, Event, CalendarSave, EventUpvote, EventComment, EventRSVP } from '../models';
 import { authMiddleware } from '../middleware';
 import mongoose from 'mongoose';
 import { logAudit } from '../audit';
@@ -35,20 +35,31 @@ router.get('/main-admin/organization-admins', authMiddleware, async (req: Reques
       return res.status(403).json({ error: 'Only main admin can manage organization admins' });
     }
 
-    const organizations = await Organization.find({})
-      .select('_id name slug')
-      .sort({ name: 1 });
+    const [organizations, adminMemberships] = await Promise.all([
+      Organization.find({})
+        .select('_id name slug')
+        .sort({ name: 1 })
+        .lean(),
+      OrganizationMember.find({ role: { $in: ['owner', 'admin'] } })
+        .select('_id organizationId userId role joinedAt')
+        .lean(),
+    ]);
 
-    const adminMemberships = await OrganizationMember.find({ role: { $in: ['owner', 'admin'] } })
-      .populate('organizationId', '_id name slug')
-      .populate('userId', '_id displayName email');
+    const userIds = Array.from(
+      new Set(adminMemberships.map((membership: any) => String(membership.userId)).filter(Boolean)),
+    ).map((id) => new mongoose.Types.ObjectId(id));
+
+    const users = await User.find({ _id: { $in: userIds } })
+      .select('_id displayName email')
+      .lean();
+
+    const usersById = new Map(users.map((user: any) => [String(user._id), user]));
 
     const adminsByOrgId = new Map<string, any[]>();
-    for (const membership of adminMemberships) {
-      const org = membership.organizationId as any;
-      const user = membership.userId as any;
-      if (!org?._id || !user?._id) continue;
-      const key = org._id.toString();
+    for (const membership of adminMemberships as any[]) {
+      const key = String(membership.organizationId);
+      const user = usersById.get(String(membership.userId));
+      if (!key || !user?._id) continue;
       if (!adminsByOrgId.has(key)) adminsByOrgId.set(key, []);
       adminsByOrgId.get(key)!.push({
         membershipId: membership._id,
@@ -226,54 +237,16 @@ router.get('/main-admin/analytics/overview', authMiddleware, async (req: Request
       return res.status(403).json({ error: 'Only main admin can view analytics' });
     }
 
-    const now = new Date();
-    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
     const [
       totalEvents,
       totalSaves,
       totalRsvps,
       totalCheckIns,
-      topOrganizations,
-      attendanceTrend,
-      postingHourBuckets,
-      recentAuditLogs,
     ] = await Promise.all([
       Event.countDocuments({ isPublished: true }),
       CalendarSave.countDocuments({}),
       EventRSVP.countDocuments({ status: { $in: ['rsvp', 'checked_in'] } }),
       EventRSVP.countDocuments({ status: 'checked_in' }),
-      Event.aggregate([
-        { $match: { isPublished: true } },
-        { $group: { _id: '$organizationId', eventCount: { $sum: 1 }, totalRsvp: { $sum: '$rsvpCount' }, totalWaitlist: { $sum: '$waitlistCount' } } },
-        { $sort: { eventCount: -1, totalRsvp: -1 } },
-        { $limit: 8 },
-        { $lookup: { from: 'organizations', localField: '_id', foreignField: '_id', as: 'organization' } },
-        { $unwind: { path: '$organization', preserveNullAndEmptyArrays: true } },
-        { $project: { organizationId: '$_id', organizationName: '$organization.name', eventCount: 1, totalRsvp: 1, totalWaitlist: 1 } },
-      ]),
-      EventRSVP.aggregate([
-        { $match: { status: 'checked_in', checkedInAt: { $gte: thirtyDaysAgo } } },
-        {
-          $group: {
-            _id: {
-              year: { $year: '$checkedInAt' },
-              month: { $month: '$checkedInAt' },
-              day: { $dayOfMonth: '$checkedInAt' },
-            },
-            count: { $sum: 1 },
-          },
-        },
-        { $sort: { '_id.year': 1, '_id.month': 1, '_id.day': 1 } },
-      ]),
-      Event.aggregate([
-        { $match: { isPublished: true, createdAt: { $gte: thirtyDaysAgo } } },
-        { $group: { _id: { $hour: '$createdAt' }, events: { $sum: 1 }, avgUpvotes: { $avg: '$upvoteCount' }, avgComments: { $avg: '$commentCount' } } },
-        { $sort: { _id: 1 } },
-      ]),
-      AuditLog.find({ createdAt: { $gte: thirtyDaysAgo } })
-        .populate('actorUserId', 'displayName email')
-        .sort({ createdAt: -1 })
-        .limit(20),
     ]);
 
     res.json({
@@ -283,10 +256,6 @@ router.get('/main-admin/analytics/overview', authMiddleware, async (req: Request
         totalRsvps,
         totalCheckIns,
       },
-      topOrganizations,
-      attendanceTrend,
-      bestPostingTimes: postingHourBuckets,
-      recentAuditLogs,
     });
   } catch (error) {
     console.error('Failed to fetch analytics overview:', error);

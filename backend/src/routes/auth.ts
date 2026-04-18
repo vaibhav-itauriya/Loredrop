@@ -1,10 +1,9 @@
 import { Router, Request, Response } from 'express';
-import { VerificationCode, User, CalendarSave, EventUpvote, EventComment, EventRSVP, EventFeedback } from '../models';
+import { VerificationCode, User } from '../models';
 import { sendVerificationEmail } from '../email';
 import { authMiddleware } from '../middleware';
 import { signPasswordSetupToken, signSessionToken, verifyPasswordSetupToken } from '../auth-token';
 import bcrypt from 'bcryptjs';
-import mongoose from 'mongoose';
 
 const router: Router = Router();
 
@@ -63,26 +62,6 @@ function normalizeAcademicTimetableSlots(input: unknown) {
   });
 
   return { slots: normalized };
-}
-
-function deriveBadges(profile: {
-  isAlumni?: boolean;
-  role?: string;
-  points?: number;
-  savedEvents?: number;
-  upvotedEvents?: number;
-  comments?: number;
-  checkedInEvents?: number;
-}) {
-  const badges = new Set<string>();
-  if (profile.isAlumni) badges.add('Alumni Network');
-  if (profile.role === 'professor') badges.add('Faculty Mentor');
-  if ((profile.savedEvents || 0) >= 5) badges.add('Planner');
-  if ((profile.upvotedEvents || 0) >= 10) badges.add('Trend Spotter');
-  if ((profile.comments || 0) >= 5) badges.add('Conversation Starter');
-  if ((profile.checkedInEvents || 0) >= 5) badges.add('Campus Regular');
-  if ((profile.points || 0) >= 250) badges.add('Tech Enthusiast');
-  return Array.from(badges);
 }
 
 // Generate random 6-digit code
@@ -334,39 +313,8 @@ router.get('/me', authMiddleware, async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    // Get user stats
-    const userId = new mongoose.Types.ObjectId(req.userId);
-    const [savedCount, upvotedCount, commentsCount, checkedInCount, feedbackCount] = await Promise.all([
-      CalendarSave.countDocuments({ userId }),
-      EventUpvote.countDocuments({ userId }),
-      EventComment.countDocuments({ userId }),
-      EventRSVP.countDocuments({ userId, status: 'checked_in' }),
-      EventFeedback.countDocuments({ userId }),
-    ]);
-
     const MAIN_ADMIN_EMAIL = 'mukunds23@iitk.ac.in';
     const isMainAdmin = user.email?.toLowerCase() === MAIN_ADMIN_EMAIL;
-    const points =
-      checkedInCount * 25 +
-      upvotedCount * 2 +
-      commentsCount * 5 +
-      savedCount * 3 +
-      feedbackCount * 8;
-    const badges = deriveBadges({
-      isAlumni: user.isAlumni,
-      role: user.role,
-      points,
-      savedEvents: savedCount,
-      upvotedEvents: upvotedCount,
-      comments: commentsCount,
-      checkedInEvents: checkedInCount,
-    });
-
-    if ((user.points || 0) !== points || JSON.stringify(user.badges || []) !== JSON.stringify(badges)) {
-      user.points = points;
-      user.badges = badges;
-      await user.save();
-    }
 
     res.json({
       _id: user._id,
@@ -379,18 +327,18 @@ router.get('/me', authMiddleware, async (req: Request, res: Response) => {
       role: user.role,
       academicLevel: user.academicLevel,
       isAlumni: !!user.isAlumni,
-      points,
-      badges,
+      points: user.points || 0,
+      badges: Array.isArray(user.badges) ? user.badges : [],
       academicTimetable: Array.isArray(user.academicTimetable) ? user.academicTimetable : [],
       fcmTokenCount: Array.isArray(user.fcmTokens) ? user.fcmTokens.length : 0,
       isMainAdmin: !!isMainAdmin,
       createdAt: user.createdAt,
       stats: {
-        savedEvents: savedCount,
-        upvotedEvents: upvotedCount,
-        comments: commentsCount,
-        checkedInEvents: checkedInCount,
-        feedbackSubmitted: feedbackCount,
+        savedEvents: 0,
+        upvotedEvents: 0,
+        comments: 0,
+        checkedInEvents: 0,
+        feedbackSubmitted: 0,
       },
     });
   } catch (error) {

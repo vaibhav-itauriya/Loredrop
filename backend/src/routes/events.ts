@@ -285,13 +285,10 @@ router.get('/upcoming', async (req: Request, res: Response) => {
       .populate('organizationId', 'name logo slug type description')
       .populate('authorId', 'displayName email')
       .sort({ dateTime: 1 })
-      .limit(limit);
+      .limit(limit)
+      .lean();
 
-    const eventsWithActualCommentCounts = await withActualCommentCounts(
-      events.map((event) => event.toObject()),
-    );
-
-    res.json(eventsWithActualCommentCounts);
+    res.json(events);
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch upcoming events' });
   }
@@ -374,8 +371,7 @@ router.get('/calendar/range', optionalAuthMiddleware, async (req: Request, res: 
       .populate('authorId', 'displayName')
       .sort({ dateTime: 1 });
 
-    const withColor = (await withActualCommentCounts(
-      events.map((event: any) => {
+    const withColor = events.map((event: any) => {
       const orgId = String(event.organizationId?._id || '');
       const hash = orgId.split('').reduce((acc: number, ch: string) => acc + ch.charCodeAt(0), 0);
       const hue = hash % 360;
@@ -383,8 +379,7 @@ router.get('/calendar/range', optionalAuthMiddleware, async (req: Request, res: 
         ...event.toObject(),
         calendarColor: `hsl(${hue} 70% 45%)`,
       };
-    }),
-    ));
+    });
 
     res.json(withColor);
   } catch (error) {

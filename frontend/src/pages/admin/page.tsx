@@ -26,7 +26,7 @@ import {
   RefreshCcw,
   Trash2,
 } from 'lucide-react';
-import { eventsAPI, organizationsAPI, authAPI, organizationRequestsAPI, organizerAPI } from '@/lib/api';
+import { eventsAPI, organizationsAPI, organizationRequestsAPI, organizerAPI } from '@/lib/api';
 import { Alert, AlertDescription } from '@/components/ui/alert.tsx';
 import { buildOrganizationOptions } from '@/lib/org-hierarchy.ts';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select.tsx';
@@ -156,7 +156,7 @@ const EVENT_AUDIENCE_SHORTCUTS = [
 ] as const;
 
 export default function AdminPage() {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [selectedOrg, setSelectedOrg] = useState<Organization | null>(null);
   const [loading, setLoading] = useState(false);
@@ -311,21 +311,37 @@ export default function AdminPage() {
 
   useEffect(() => {
     if (!isAuthenticated) {
+      setIsMainAdmin(false);
+      setCurrentUserEmail('');
+      setIsOrgMember(false);
       setCheckingMembership(false);
       return;
     }
+    if (user?.isMainAdmin) {
+      setIsMainAdmin(true);
+      setCurrentUserEmail(user?.email || '');
+      setIsOrgMember(false);
+      setCheckingMembership(false);
+      setOrganizations([]);
+      setSelectedOrg(null);
+      setEvents([]);
+      setOrganizerTasks([]);
+      setOrganizerAnalytics(null);
+      setOrganizerMembers([]);
+      setChannels([]);
+      setSelectedChannelId('');
+      return;
+    }
     checkMembership();
-  }, [isAuthenticated]);
+  }, [isAuthenticated, user?._id, user?.email, user?.isMainAdmin]);
 
   const checkMembership = async () => {
     try {
       setCheckingMembership(true);
-      const [profileRes, membershipData] = await Promise.all([
-        authAPI.getProfile().catch(() => ({ isMainAdmin: false })),
-        organizationsAPI.getUserMemberships(),
-      ]);
-      setIsMainAdmin(!!(profileRes as any).isMainAdmin);
-      setCurrentUserEmail((profileRes as any)?.email || '');
+      const membershipData = await organizationsAPI.getUserMemberships();
+      const mainAdmin = !!user?.isMainAdmin;
+      setIsMainAdmin(mainAdmin);
+      setCurrentUserEmail(user?.email || '');
       setIsOrgMember(membershipData.isMember);
       if (membershipData.isMember && membershipData.organizations.length > 0) {
         const orgs = membershipData.organizations.map((org: any) => ({
@@ -338,11 +354,21 @@ export default function AdminPage() {
         }));
         setOrganizations(orgs);
         setSelectedOrg(orgs[0]);
-        fetchEvents(orgs[0]._id);
-        fetchOrganizerWorkspace(orgs[0]._id);
+        if (!mainAdmin) {
+          fetchEvents(orgs[0]._id);
+          fetchOrganizerWorkspace(orgs[0]._id);
+        } else {
+          setEvents([]);
+          setOrganizerTasks([]);
+          setOrganizerAnalytics(null);
+          setOrganizerMembers([]);
+          setChannels([]);
+          setSelectedChannelId('');
+        }
       }
     } catch (err) {
       console.error('Failed to check membership:', err);
+      setIsMainAdmin(false);
       setIsOrgMember(false);
     } finally {
       setCheckingMembership(false);
@@ -391,8 +417,16 @@ export default function AdminPage() {
   useEffect(() => {
     if (isAuthenticated && isMainAdmin) {
       fetchPendingRequests();
-      fetchOrganizationAdmins();
-      fetchAnalyticsOverview();
+      const adminListTimer = window.setTimeout(() => {
+        fetchOrganizationAdmins();
+      }, 150);
+      const analyticsTimer = window.setTimeout(() => {
+        fetchAnalyticsOverview();
+      }, 500);
+      return () => {
+        window.clearTimeout(adminListTimer);
+        window.clearTimeout(analyticsTimer);
+      };
     }
   }, [isAuthenticated, isMainAdmin]);
 
@@ -414,12 +448,13 @@ export default function AdminPage() {
   }, [selectedChannelId]);
 
   useEffect(() => {
+    if (isMainAdmin) return;
     if (!selectedOrg?._id) return;
     const timer = setInterval(() => {
       fetchOrganizerWorkspace(selectedOrg._id);
     }, 30000);
     return () => clearInterval(timer);
-  }, [selectedOrg?._id, selectedChannelId]);
+  }, [isMainAdmin, selectedOrg?._id, selectedChannelId]);
 
   useEffect(() => {
     if (messageBottomRef.current) {

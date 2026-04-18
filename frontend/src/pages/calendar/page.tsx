@@ -163,22 +163,14 @@ export default function CalendarPage() {
       try {
         const rangeStart = startOfWeek(startOfMonth(monthCursor));
         const rangeEnd = endOfWeek(endOfMonth(monthCursor));
-        const [rangeEvents, upcomingRangeEvents] = await Promise.all([
-          eventsAPI.getCalendarRange(
-            format(rangeStart, "yyyy-MM-dd"),
-            format(rangeEnd, "yyyy-MM-dd"),
-          ),
-          eventsAPI.getUpcoming(100),
-        ]);
-
-        const mergedEvents = [
-          ...(Array.isArray(rangeEvents) ? rangeEvents : []),
-          ...(Array.isArray(upcomingRangeEvents) ? upcomingRangeEvents : []),
-        ];
+        const rangeEvents = await eventsAPI.getCalendarRange(
+          format(rangeStart, "yyyy-MM-dd"),
+          format(rangeEnd, "yyyy-MM-dd"),
+        );
 
         const dedupedEvents = Array.from(
           new Map(
-            mergedEvents
+            (Array.isArray(rangeEvents) ? rangeEvents : [])
               .filter((event: any) => event?._id && event?.dateTime)
               .map((event: any) => [String(event._id), event]),
           ).values(),

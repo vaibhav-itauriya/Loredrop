@@ -1,42 +1,102 @@
-import { useState, useEffect } from "react";
+import {
+  createElement,
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 import { authAPI } from "@/lib/api";
 
-export function useAuth() {
+type AuthContextValue = {
+  user: any;
+  isAuthenticated: boolean;
+  isLoading: boolean;
+  error: Error | null;
+  signinRedirect: () => Promise<void>;
+  removeUser: () => Promise<void>;
+  useUser: () => any;
+  isConfigured: boolean;
+};
+
+const AuthContext = createContext<AuthContextValue | null>(null);
+
+function parseStoredUser(raw: string | null) {
+  if (!raw) return null;
+
+  try {
+    return JSON.parse(raw);
+  } catch {
+    localStorage.removeItem("user");
+    return null;
+  }
+}
+
+export function SessionAuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
   const [isConfigured] = useState(true);
 
   useEffect(() => {
-    const syncUserFromStorage = async () => {
-      try {
-        const storedUser = localStorage.getItem("user");
-        const storedToken = localStorage.getItem("authToken");
+    let cancelled = false;
 
-        if (storedUser && storedToken) {
-          try {
-            const profile = await authAPI.getProfile();
-            setUser(profile);
-            localStorage.setItem("user", JSON.stringify(profile));
-          } catch (err: any) {
-            localStorage.removeItem("authToken");
-            localStorage.removeItem("user");
+    const syncUserFromStorage = async () => {
+      if (!cancelled) {
+        setIsLoading(true);
+        setError(null);
+      }
+
+      try {
+        const storedToken = localStorage.getItem("authToken");
+        const parsedStoredUser = parseStoredUser(localStorage.getItem("user"));
+
+        if (!storedToken) {
+          if (!cancelled) {
             setUser(null);
           }
           return;
         }
 
-        setUser(null);
+        if (parsedStoredUser && !cancelled) {
+          setUser(parsedStoredUser);
+        }
+
+        try {
+          const profile = await authAPI.getProfile();
+          if (cancelled) return;
+          setUser(profile);
+          localStorage.setItem("user", JSON.stringify(profile));
+        } catch (err: any) {
+          if (cancelled) return;
+
+          const status = typeof err?.status === "number" ? err.status : null;
+          if (status === 401 || status === 403) {
+            localStorage.removeItem("authToken");
+            localStorage.removeItem("user");
+            setUser(null);
+          } else if (!parsedStoredUser) {
+            setUser(null);
+          }
+
+          setError(err instanceof Error ? err : new Error("Failed to refresh auth session"));
+        }
       } catch (err) {
-        console.error("Error loading user from storage:", err);
+        if (!cancelled) {
+          const nextError = err instanceof Error ? err : new Error("Failed to load auth state");
+          setError(nextError);
+          setUser(null);
+          console.error("Error loading user from storage:", err);
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoading(false);
+        }
       }
     };
 
-    try {
-      void syncUserFromStorage();
-    } finally {
-      setIsLoading(false);
-    }
+    void syncUserFromStorage();
 
     const handleSync = () => {
       void syncUserFromStorage();
@@ -44,9 +104,13 @@ export function useAuth() {
 
     window.addEventListener("storage", handleSync);
     window.addEventListener("auth-state-changed", handleSync as EventListener);
+    window.addEventListener("focus", handleSync);
+
     return () => {
+      cancelled = true;
       window.removeEventListener("storage", handleSync);
       window.removeEventListener("auth-state-changed", handleSync as EventListener);
+      window.removeEventListener("focus", handleSync);
     };
   }, []);
 
@@ -60,8 +124,8 @@ export function useAuth() {
     try {
       localStorage.removeItem("authToken");
       localStorage.removeItem("user");
-      window.dispatchEvent(new Event("auth-state-changed"));
       setUser(null);
+      window.dispatchEvent(new Event("auth-state-changed"));
     } catch (err) {
       const nextError = err as Error;
       setError(nextError);
@@ -71,14 +135,29 @@ export function useAuth() {
     }
   };
 
-  return {
-    user,
-    isAuthenticated: !!user,
-    isLoading,
-    error,
-    signinRedirect,
-    removeUser,
-    useUser: () => user,
-    isConfigured,
-  };
+  const value = useMemo<AuthContextValue>(
+    () => ({
+      user,
+      isAuthenticated: !!user,
+      isLoading,
+      error,
+      signinRedirect,
+      removeUser,
+      useUser: () => user,
+      isConfigured,
+    }),
+    [error, isConfigured, isLoading, user],
+  );
+
+  return createElement(AuthContext.Provider, { value }, children);
+}
+
+export function useAuth() {
+  const context = useContext(AuthContext);
+
+  if (!context) {
+    throw new Error("useAuth must be used within SessionAuthProvider");
+  }
+
+  return context;
 }

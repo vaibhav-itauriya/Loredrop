@@ -10,7 +10,7 @@ import { useState, useEffect } from "react";
 import { useTheme } from "next-themes";
 import { useThemeFlip } from "@/components/providers/theme.tsx";
 import NotificationBell from "@/components/NotificationBell.tsx";
-import { organizationsAPI, authAPI } from "@/lib/api";
+import { organizationsAPI } from "@/lib/api";
 import { buildOrganizationOptions } from "@/lib/org-hierarchy.ts";
 import platformLogo from "@/Gemini_Generated_Image_wwu3p2wwu3p2wwu3-removebg-preview.png";
 import {
@@ -64,7 +64,7 @@ export default function FeedHeader({
   onSelectTrending,
   onSelectUpcoming,
 }: FeedHeaderProps) {
-  const { user, isAuthenticated, removeUser } = useAuth();
+  const { user, isAuthenticated, isLoading, removeUser } = useAuth();
   const navigate = useNavigate();
   const { theme } = useTheme();
   const { flipTheme } = useThemeFlip();
@@ -82,15 +82,12 @@ export default function FeedHeader({
       const checkAccess = async () => {
         try {
           setCheckingMembership(true);
-          const [profileRes, membershipData] = await Promise.all([
-            authAPI.getProfile().catch(() => ({ isMainAdmin: false })),
-            organizationsAPI.getUserMemberships(),
-          ]);
+          const membershipData = await organizationsAPI.getUserMemberships();
           const manageableOrg =
             (membershipData?.organizations || []).find((org: any) =>
               ["owner", "admin", "moderator"].includes(org?.role)
             ) || membershipData?.organizations?.[0];
-          setIsMainAdmin(!!(profileRes as any).isMainAdmin);
+          setIsMainAdmin(!!user?.isMainAdmin);
           setIsOrgMember(membershipData.isMember);
           setManageableOrgSlug(manageableOrg?.slug || null);
         } catch (err) {
@@ -105,7 +102,7 @@ export default function FeedHeader({
       checkAccess();
     } else {
       setIsOrgMember(false);
-      setIsMainAdmin(false);
+      setIsMainAdmin(!!user?.isMainAdmin);
       setManageableOrgSlug(null);
     }
   }, [isAuthenticated, user]);
@@ -223,7 +220,7 @@ export default function FeedHeader({
 
             {isAuthenticated && <NotificationBell />}
 
-            {isAuthenticated ? (
+            {isLoading ? null : isAuthenticated ? (
               <>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>

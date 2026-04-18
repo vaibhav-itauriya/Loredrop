@@ -45,6 +45,7 @@ export default function FeedPage() {
   const [page, setPage] = useState(1);
   const [canLoadMore, setCanLoadMore] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [showPlannerCard, setShowPlannerCard] = useState(false);
   const deferredSearchQuery = useDeferredValue(searchQuery);
   const hasSearchQuery = deferredSearchQuery.trim().length > 0;
 
@@ -97,6 +98,25 @@ export default function FeedPage() {
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: "smooth" });
   }, [feedMode]);
+
+  useEffect(() => {
+    const schedule = () => setShowPlannerCard(true);
+    const idleCallback = (window as Window & {
+      requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number;
+      cancelIdleCallback?: (id: number) => void;
+    }).requestIdleCallback;
+    const cancelIdleCallback = (window as Window & {
+      cancelIdleCallback?: (id: number) => void;
+    }).cancelIdleCallback;
+
+    if (idleCallback) {
+      const id = idleCallback(schedule, { timeout: 1200 });
+      return () => cancelIdleCallback?.(id);
+    }
+
+    const timeoutId = window.setTimeout(schedule, 500);
+    return () => window.clearTimeout(timeoutId);
+  }, []);
 
   const activeOrganizationIds = useMemo(() => {
     if (hasSearchQuery) {
@@ -918,7 +938,7 @@ export default function FeedPage() {
             )}
 
             <div className="mt-6 space-y-4 xl:hidden">
-              <PersonalCalendarCard />
+              {showPlannerCard ? <PersonalCalendarCard /> : null}
               <UpcomingEventsSidebar events={upcomingEvents} onOpenEvent={handleOpenUpcomingEvent} />
             </div>
           </main>
@@ -930,7 +950,7 @@ export default function FeedPage() {
               transition={{ duration: 0.45, delay: 0.18, ease: "easeOut" }}
               className="h-full space-y-5 overflow-y-auto pr-1 no-scrollbar"
             >
-              <PersonalCalendarCard />
+              {showPlannerCard ? <PersonalCalendarCard /> : null}
               <UpcomingEventsSidebar events={upcomingEvents} onOpenEvent={handleOpenUpcomingEvent} />
             </motion.div>
           </aside>
